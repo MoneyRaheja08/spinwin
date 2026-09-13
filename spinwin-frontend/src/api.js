@@ -16,3 +16,6 @@ export const checkEligibility = (tvCode, billNumber) =>
 
 export const createSession = (billId, tvCode) =>
   post("/api/sessions", { bill_id: billId, tv_code: tvCode });
+
+export const kioskSpin = (sessionId) =>
+  post(`/api/sessions/${sessionId}/kiosk-spin`, {});

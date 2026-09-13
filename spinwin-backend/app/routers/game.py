@@ -255,6 +255,21 @@ async def force_winner(session_id: str, body: ForceIn,
     return {"ok": True, "forced_prize": prize.name}
 
 
+@router.post("/sessions/{session_id}/kiosk-spin")
+async def kiosk_spin(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Public single-screen kiosk spin. No login needed; the server still
+    decides the prize, enforces one-spin-per-bill, and deducts stock."""
+    sess = (await db.execute(
+        select(SpinSession).where(SpinSession.id == _uid(session_id))
+    )).scalar_one_or_none()
+    if not sess:
+        raise HTTPException(404, "Session not found")
+    try:
+        return await award_spin(session_id)
+    except SpinError as exc:
+        raise HTTPException(400, str(exc))
+
+
 @router.get("/my/tv-devices")
 async def my_tv_devices(db: AsyncSession = Depends(get_db),
                         user: User = Depends(get_current_user)):

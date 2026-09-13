@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { makeSocket } from "../socket";
-import { checkEligibility, createSession } from "../api";
+import { checkEligibility, createSession, kioskSpin } from "../api";
 import { branding } from "../branding";
 import * as sound from "../sound";
 import Wheel, { targetRotation } from "../components/Wheel";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv") || "TV-001";
+const SPIN_SECONDS = 5.5;
 const PLACEHOLDER = [
   { name: "\u20B9100" }, { name: "\u20B9500" }, { name: "Earphones" },
   { name: "Smartwatch" }, { name: "Cover" }, { name: "\u20B92000" },
@@ -18,18 +18,15 @@ export default function Kiosk() {
   const [wheel, setWheel] = useState([]);
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
-  const [duration, setDuration] = useState(6);
   const [result, setResult] = useState(null);
   const [customerName, setCustomerName] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [msg, setMsg] = useState("");
-  const sockRef = useRef(null);
+  const sessionRef = useRef(null);
   const rotRef = useRef(0);
 
-  useEffect(() => () => sockRef.current && sockRef.current.close(), []);
-
   function reset() {
-    if (sockRef.current) { sockRef.current.close(); sockRef.current = null; }
+    sessionRef.current = null;
     setPhase("enter"); setBill(""); setWheel([]); setResult(null); setCustomerName(null);
     setRotation(0); rotRef.current = 0; setSpinning(false); setMsg("");
   }
@@ -56,29 +53,30 @@ export default function Kiosk() {
       setWheel(e.wheel && e.wheel.length ? e.wheel : PLACEHOLDER);
       setCustomerName(e.customer_name || null);
       const s = await createSession(e.bill_id, TV_CODE);
-      const sock = makeSocket();
-      sockRef.current = sock;
-      sock.on("connect", () => sock.emit("customer_join", { pairing_code: s.pairing_code }, () => {}));
-      sock.on("SPIN_STARTED", (d) => {
-        const w = d.wheel && d.wheel.length ? d.wheel : wheel;
-        setWheel(w); setDuration(d.duration || 6);
-        runCountdown();
-        const base = rotRef.current - (rotRef.current % 360);
-        const target = base + targetRotation(d.winning_index, w.length, 6);
-        requestAnimationFrame(() => { setSpinning(true); setRotation(target); rotRef.current = target; });
-      });
-      sock.on("PRIZE_WON", (d) => { setResult(d.result); setPhase("result"); fire(); sound.win(); });
-      sock.on("SPIN_ERROR", (d) => { setMsg(d.error); setPhase("error"); });
+      sessionRef.current = s.session_id;
       setPhase("ready");
     } catch (err) {
       setMsg(err.message); setPhase("error");
     }
   }
 
-  function spin() {
+  async function spin() {
+    if (!sessionRef.current) return;
     sound.unlock();
     setPhase("spinning");
-    sockRef.current.emit("SPIN_REQUESTED", {});
+    try {
+      const res = await kioskSpin(sessionRef.current);   // server decides the prize
+      const w = wheel.length ? wheel : PLACEHOLDER;
+      let idx = w.findIndex((x) => x.prize_id === res.prize_id);
+      if (idx < 0) idx = 0;
+      runCountdown();
+      const base = rotRef.current - (rotRef.current % 360);
+      const target = base + targetRotation(idx, w.length, 6);
+      requestAnimationFrame(() => { setSpinning(true); setRotation(target); rotRef.current = target; });
+      setTimeout(() => { setResult(res); setPhase("result"); fire(); sound.win(); }, SPIN_SECONDS * 1000);
+    } catch (err) {
+      setMsg(err.message); setPhase("error");
+    }
   }
 
   function runCountdown() {
@@ -115,7 +113,7 @@ export default function Kiosk() {
       <main className="tv-stage">
         <section className="tv-wheel">
           <Wheel segments={wheel.length ? wheel : PLACEHOLDER} rotation={rotation}
-                 duration={duration} spinning={spinning} />
+                 duration={SPIN_SECONDS} spinning={spinning} />
           {countdown !== null && <div className="countdown">{countdown}</div>}
         </section>
 
@@ -132,7 +130,7 @@ export default function Kiosk() {
                 ))}
               </div>
               <button className="kiosk-cta" onClick={check} disabled={phase === "checking" || !bill}>
-                {phase === "checking" ? "Checking\u2026" : "Check & play"}
+                {phase === "checking" ? "Checking…" : "Check & play"}
               </button>
             </div>
           )}
@@ -146,7 +144,7 @@ export default function Kiosk() {
           )}
 
           {phase === "spinning" && (
-            <div className="panel-card"><h2 className="panel-h">Spinning\u2026</h2><p className="panel-sub">Good luck!</p></div>
+            <div className="panel-card"><h2 className="panel-h">Spinning…</h2><p className="panel-sub">Good luck!</p></div>
           )}
 
           {phase === "result" && result && (
