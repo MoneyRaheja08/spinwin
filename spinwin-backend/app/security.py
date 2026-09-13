@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,18 +12,18 @@ from .config import settings
 from .db import get_db
 from .models import User, UserRole
 
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def hash_password(raw: str) -> str:
-    return pwd_ctx.hash(raw)
+    # bcrypt hashes only the first 72 bytes; truncate so long input can't error.
+    return bcrypt.hashpw(raw.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(raw: str, hashed: str) -> bool:
     try:
-        return pwd_ctx.verify(raw, hashed)
-    except ValueError:
+        return bcrypt.checkpw(raw.encode("utf-8")[:72], hashed.encode("utf-8"))
+    except (ValueError, TypeError):
         return False
 
 

@@ -177,3 +177,14 @@ body {
 }
 .kiosk-cta.big { font-size: 5vh; padding: 3.2vh; letter-spacing: 0.05em; }
 .kiosk-cta:disabled { opacity: 0.5; cursor: default; }
+
+/* ============================== TV greeting banner ============================== */
+.tv-greeting {
+  text-align: center;
+  font-family: var(--display); font-weight: 800;
+  color: var(--gold-soft); font-size: 4vh;
+  padding: 0.4vh 2vw 1.2vh;
+  text-shadow: 0 0 24px rgba(245,179,1,.45);
+  animation: greet 0.5s ease;
+}
+@keyframes greet { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }

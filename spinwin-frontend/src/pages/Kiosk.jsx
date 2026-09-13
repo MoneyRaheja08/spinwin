@@ -20,6 +20,7 @@ export default function Kiosk() {
   const [spinning, setSpinning] = useState(false);
   const [duration, setDuration] = useState(6);
   const [result, setResult] = useState(null);
+  const [customerName, setCustomerName] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [msg, setMsg] = useState("");
   const sockRef = useRef(null);
@@ -29,7 +30,7 @@ export default function Kiosk() {
 
   function reset() {
     if (sockRef.current) { sockRef.current.close(); sockRef.current = null; }
-    setPhase("enter"); setBill(""); setWheel([]); setResult(null);
+    setPhase("enter"); setBill(""); setWheel([]); setResult(null); setCustomerName(null);
     setRotation(0); rotRef.current = 0; setSpinning(false); setMsg("");
   }
 
@@ -53,6 +54,7 @@ export default function Kiosk() {
         return;
       }
       setWheel(e.wheel && e.wheel.length ? e.wheel : PLACEHOLDER);
+      setCustomerName(e.customer_name || null);
       const s = await createSession(e.bill_id, TV_CODE);
       const sock = makeSocket();
       sockRef.current = sock;
@@ -108,6 +110,8 @@ export default function Kiosk() {
         <span style={{ width: "6vh" }} />
       </header>
 
+      {customerName && <div className="tv-greeting">Namaste, {customerName}! 🙏</div>}
+
       <main className="tv-stage">
         <section className="tv-wheel">
           <Wheel segments={wheel.length ? wheel : PLACEHOLDER} rotation={rotation}
@@ -135,8 +139,8 @@ export default function Kiosk() {
 
           {phase === "ready" && (
             <div className="panel-card">
-              <p className="panel-kicker">You're in</p>
-              <h2 className="panel-h">1 spin ready</h2>
+              <h2 className="panel-h">Namaste{customerName ? ", " + customerName : ""}!</h2>
+              <p className="panel-kicker">You have 1 spin</p>
               <button className="kiosk-cta big" onClick={spin}>SPIN</button>
             </div>
           )}
@@ -147,7 +151,7 @@ export default function Kiosk() {
 
           {phase === "result" && result && (
             <div className="panel-card win">
-              <p className="panel-kicker">Congratulations!</p>
+              <p className="panel-kicker">Congratulations{customerName ? ", " + customerName : ""}!</p>
               <h2 className="win-prize">{result.prize_name}</h2>
               {result.prize_value > 0 && (
                 <p className="win-value">{branding.currency}{result.prize_value.toLocaleString("en-IN")}</p>

@@ -12,6 +12,7 @@ export default function Tv() {
   const [phase, setPhase] = useState("idle"); // idle | ready | spinning | result
   const [wheel, setWheel] = useState([]);
   const [masked, setMasked] = useState(null);
+  const [customerName, setCustomerName] = useState(null);
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [duration, setDuration] = useState(6);
@@ -32,6 +33,7 @@ export default function Tv() {
     s.on("SESSION_ATTACHED", (d) => {
       setWheel(d.wheel || []);
       setMasked(d.masked_mobile || null);
+      setCustomerName(d.customer_name || null);
       setResult(null);
       setRotation(0); rotRef.current = 0;
       setSpinning(false);
@@ -112,6 +114,8 @@ export default function Tv() {
         </button>
       </header>
 
+      {customerName && <div className="tv-greeting">Namaste, {customerName}! 🙏</div>}
+
       <main className="tv-stage">
         <section className="tv-wheel">
           <Wheel segments={wheel.length ? wheel : PLACEHOLDER} rotation={rotation}
@@ -134,7 +138,7 @@ export default function Tv() {
           {phase === "ready" && (
             <div className="panel-card">
               <p className="panel-kicker">{branding.companyName}</p>
-              <h2 className="panel-h">Customer ready</h2>
+              <h2 className="panel-h">{customerName ? `Namaste, ${customerName}!` : "Customer ready"}</h2>
               {masked && <p className="masked">{masked}</p>}
               <p className="panel-sub">Press <b>Spin</b> on your phone</p>
             </div>

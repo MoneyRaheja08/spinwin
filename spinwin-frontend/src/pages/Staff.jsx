@@ -11,6 +11,48 @@ export default function Staff() {
   return <Console onSignOut={() => { logout(); setAuthed(false); }} />;
 }
 
+function RegisterBill() {
+  const [f, setF] = useState({ customer_name: "", bill_number: "", model: "", price: "" });
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function create() {
+    if (!f.customer_name || !f.bill_number || !f.price) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await post("/api/staff/bills", {
+        customer_name: f.customer_name.trim(),
+        bill_number: f.bill_number.trim(),
+        model: f.model.trim(),
+        price: Number(f.price),
+      });
+      setMsg(`\u2713 Bill ${r.bill_number} created for ${r.customer_name}. They can now spin at the TV.`);
+      setF({ customer_name: "", bill_number: "", model: "", price: "" });
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="card">
+      <h3>Register a bill</h3>
+      <div className="form-grid">
+        <label className="field"><span>Customer name</span>
+          <input className="input" value={f.customer_name} onChange={(e) => setF({ ...f, customer_name: e.target.value })} /></label>
+        <label className="field"><span>Bill number</span>
+          <input className="input" value={f.bill_number} onChange={(e) => setF({ ...f, bill_number: e.target.value })} /></label>
+        <label className="field"><span>Mobile model</span>
+          <input className="input" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} /></label>
+        <label className="field"><span>Price</span>
+          <input className="input" type="number" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></label>
+      </div>
+      {msg && <p className={msg.startsWith("\u2713") ? "adm-ok" : "adm-err"}>{msg}</p>}
+      <button className="btn btn-gold" onClick={create}
+              disabled={busy || !f.customer_name || !f.bill_number || !f.price}>
+        {busy ? "Saving\u2026" : "Create bill"}
+      </button>
+    </div>
+  );
+}
+
 function Console({ onSignOut }) {
   const [tvs, setTvs] = useState([]);
   const [tv, setTv] = useState("");
@@ -62,6 +104,8 @@ function Console({ onSignOut }) {
           <h1 className="page-h">Staff console</h1>
           <button className="btn btn-ghost sm" onClick={onSignOut}>Sign out</button>
         </div>
+
+        <RegisterBill />
 
         <div className="card">
           <div className="form-grid">

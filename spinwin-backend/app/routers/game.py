@@ -13,7 +13,7 @@ from ..db import get_db
 from ..engine import SpinError, award_spin, resolve_slab
 from ..models import (
     AuditLog, Bill, BillItem, BillSpinStatus, Customer, Prize, SessionStatus,
-    SpinSession, TvDevice, User, UserRole,
+    SpinSession, Store, TvDevice, User, UserRole,
 )
 from ..realtime import _wheel_for_slab, sio
 from ..security import get_current_user, require_roles
@@ -72,9 +72,15 @@ async def eligibility(body: EligibilityIn, db: AsyncSession = Depends(get_db)):
 
     slab = await resolve_slab(db, item.selling_price, bill.store_id) if item else None
     wheel = await _wheel_for_slab(db, slab.id) if slab else []
+    customer_name = None
+    if bill.customer_id:
+        customer_name = (await db.execute(
+            select(Customer.name).where(Customer.id == bill.customer_id)
+        )).scalar_one_or_none()
     return {
         "eligible": eligible,
         "bill_id": str(bill.id),
+        "customer_name": customer_name,
         "spin_status": bill.spin_status.value,
         "spins_left": max(bill.spins_allowed - bill.spins_used, 0),
         "item": ({"bill_item_id": str(item.id), "model": item.model,
@@ -82,6 +88,56 @@ async def eligibility(body: EligibilityIn, db: AsyncSession = Depends(get_db)):
         "slab": ({"id": str(slab.id), "name": slab.name} if slab else None),
         "wheel": wheel,
     }
+
+
+class StaffBillIn(BaseModel):
+    customer_name: str
+    bill_number: str
+    model: str
+    price: float
+    mobile: str | None = None
+    store_id: str | None = None
+
+
+@router.post("/staff/bills")
+async def staff_create_bill(
+    body: StaffBillIn, db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(
+        UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.STAFF)),
+):
+    """Staff registers a walk-in bill on the spot; the customer then enters
+    this bill number at the TV to play."""
+    store_id = user.store_id
+    if store_id is None:
+        store_id = _uid(body.store_id) if body.store_id else \
+            (await db.execute(select(Store.id).limit(1))).scalar_one_or_none()
+    if store_id is None:
+        raise HTTPException(400, "No store available for this account")
+
+    dup = (await db.execute(select(Bill).where(
+        Bill.store_id == store_id, Bill.bill_number == body.bill_number))).scalar_one_or_none()
+    if dup:
+        raise HTTPException(400, "A bill with this number already exists")
+
+    mobile = body.mobile or f"NA-{body.bill_number}-{secrets.token_hex(2)}"
+    cust = Customer(name=body.customer_name, mobile=mobile)
+    db.add(cust)
+    await db.flush()
+
+    bill = Bill(store_id=store_id, bill_number=body.bill_number, customer_id=cust.id,
+                total_amount=body.price, spin_eligible=True, spins_allowed=1,
+                spins_used=0, spin_status=BillSpinStatus.NOT_PLAYED)
+    db.add(bill)
+    await db.flush()
+    db.add(BillItem(bill_id=bill.id, model=body.model,
+                    selling_price=body.price, is_spin_item=True))
+    db.add(AuditLog(actor_user_id=user.id, actor_role=user.role.value,
+                    action="BILL_CREATE", entity_type="bill", entity_id=bill.id,
+                    store_id=store_id,
+                    meta_data={"bill_number": body.bill_number, "price": body.price}))
+    await db.commit()
+    return {"ok": True, "bill_id": str(bill.id),
+            "bill_number": body.bill_number, "customer_name": body.customer_name}
 
 
 class SessionIn(BaseModel):
@@ -137,15 +193,19 @@ async def create_session(body: SessionIn, db: AsyncSession = Depends(get_db)):
     # Tell the paired TV a customer has arrived, and hand it the wheel to show.
     if tv:
         masked = None
+        cname = None
         if bill.customer_id:
             cust = (await db.execute(
                 select(Customer).where(Customer.id == bill.customer_id)
             )).scalar_one_or_none()
-            masked = _mask_mobile(cust.mobile) if cust else None
+            if cust:
+                masked = _mask_mobile(cust.mobile)
+                cname = cust.name
         wheel = await _wheel_for_slab(db, slab.id)
         await sio.emit("SESSION_ATTACHED", {
             "session_id": str(sess.id),
             "masked_mobile": masked,
+            "customer_name": cname,
             "wheel": wheel,
             "slab": slab.name,
         }, room=f"tv:{tv.id}")
