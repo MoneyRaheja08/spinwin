@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { get, post, del, useAsync } from "./api";
+import { get, post, patch, del, useAsync } from "./api";
+
+// Plain-language "how often" -> internal weight. Users never see numbers.
+const FREQ = [
+  { label: "Very often", weight: 50 },
+  { label: "Often", weight: 25 },
+  { label: "Sometimes", weight: 10 },
+  { label: "Rarely", weight: 4 },
+  { label: "Very rarely", weight: 1 },
+];
+
+const rupee = (n) => "\u20B9" + Number(n).toLocaleString("en-IN");
 
 async function loadAll() {
   const [slabs, prizes, inventory] = await Promise.all([
@@ -11,8 +22,6 @@ async function loadAll() {
   }));
   return { slabs, prizes, inventory, rules };
 }
-
-const rupee = (n) => "\u20B9" + Number(n).toLocaleString("en-IN");
 
 export default function QuickSetup() {
   const { data, loading, error, reload } = useAsync(loadAll);
@@ -38,16 +47,17 @@ export default function QuickSetup() {
 
   const invByPrize = {};
   data.inventory.forEach((i) => { if (invByPrize[i.prize_id] === undefined) invByPrize[i.prize_id] = i; });
-  const ranges = [...data.slabs].sort((a, b) => a.min_price - b.min_price);
+  const ranges = data.slabs.filter((s) => s.is_active !== false).sort((a, b) => a.min_price - b.min_price);
 
   return (
     <div>
       <h1 className="page-h">Gifts by price</h1>
 
       <div className="card">
-        <p className="muted">
-          Choose which gifts appear for each phone price range. <b>Put one gift in a range and it always wins.</b>{" "}
-          Add two or more and set each one's <b>Chance</b> to run a lucky draw.
+        <p className="muted" style={{ lineHeight: 1.6 }}>
+          <b>Step 1:</b> add a phone price range.<br />
+          <b>Step 2:</b> add gifts to it. Add <b>one</b> gift and everyone in that range wins it.
+          Add <b>several</b> and choose how often each should appear.
         </p>
         <div className="row">
           <input className="input sm" type="number" placeholder="From \u20B9" value={range.from}
@@ -70,7 +80,7 @@ export default function QuickSetup() {
 }
 
 function RangeCard({ slab, rules, prizes, inv, onChange }) {
-  const [g, setG] = useState({ name: "", stock: "", chance: "1" });
+  const [g, setG] = useState({ name: "", stock: "", weight: 25 });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -89,18 +99,29 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
       if (!existingInv) await post("/api/admin/inventory", { prize_id: prize.id, quantity_initial: stockVal });
       else if (g.stock) await post(`/api/admin/inventory/${existingInv.id}/restock`, { quantity: Number(g.stock) });
 
-      await post("/api/admin/rules", { slab_id: slab.id, prize_id: prize.id, weight: Number(g.chance) || 1 });
-      setG({ name: "", stock: "", chance: "1" });
+      await post("/api/admin/rules", { slab_id: slab.id, prize_id: prize.id, weight: Number(g.weight) || 1 });
+      setG({ name: "", stock: "", weight: 25 });
       onChange();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function removeGift(ruleId) { await del(`/api/admin/rules/${ruleId}`); onChange(); }
+  async function removeRange() {
+    if (!window.confirm(`Remove the range "${slab.name}"? Its gifts stay saved but the range is hidden.`)) return;
+    await patch(`/api/admin/slabs/${slab.id}`, { is_active: false });
+    onChange();
+  }
+
+  const single = rules.length === 1;
 
   return (
     <div className="card">
-      <h3>{slab.name}</h3>
-      <table className="table">
-        <thead><tr><th>Gift</th><th>Chance</th><th>Stock</th><th></th></tr></thead>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h3 style={{ margin: 0 }}>{slab.name}</h3>
+        <button className="btn btn-ghost sm" onClick={removeRange}>Remove range</button>
+      </div>
+
+      <table className="table" style={{ marginTop: 10 }}>
+        <thead><tr><th>Gift</th><th>How often</th><th>Stock</th><th></th></tr></thead>
         <tbody>
           {rules.map((r) => {
             const stock = inv[r.prize_id];
@@ -108,7 +129,7 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
             return (
               <tr key={r.id}>
                 <td>{r.prize_name}</td>
-                <td><b>{r.percentage}%</b></td>
+                <td><b>{single ? "Always" : r.percentage + "%"}</b></td>
                 <td>{rem === null ? "\u2014" : rem > 99999 ? "\u221E" : rem}</td>
                 <td><button className="btn btn-ghost sm" onClick={() => removeGift(r.id)}>Remove</button></td>
               </tr>
@@ -123,13 +144,16 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
                onChange={(e) => setG({ ...g, name: e.target.value })} />
         <input className="input sm" type="number" placeholder="Stock (blank = lots)" value={g.stock}
                onChange={(e) => setG({ ...g, stock: e.target.value })} />
-        <input className="input sm" type="number" placeholder="Chance" value={g.chance}
-               onChange={(e) => setG({ ...g, chance: e.target.value })} />
+        <select className="input" value={g.weight} onChange={(e) => setG({ ...g, weight: e.target.value })}
+                title="How often this gift should come up">
+          {FREQ.map((f) => <option key={f.weight} value={f.weight}>{f.label}</option>)}
+        </select>
         <button className="btn btn-gold" onClick={addGift} disabled={busy || !g.name.trim()}>Add gift</button>
       </div>
       {msg && <p className="adm-err">{msg}</p>}
       <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-        Tip: “Chance” is relative — two gifts at 1 &amp; 1 = 50/50; at 3 &amp; 1 = 75/25. One gift alone = always wins.
+        “How often” only matters when a range has more than one gift. With one gift, it always wins.
+        When a gift runs out of stock, it drops off the wheel automatically.
       </p>
     </div>
   );
