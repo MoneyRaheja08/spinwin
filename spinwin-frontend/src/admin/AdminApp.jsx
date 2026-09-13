@@ -4,6 +4,7 @@ import { isAuthed, logout, role } from "./api";
 import { branding } from "../branding";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
+import QuickSetup from "./QuickSetup";
 import Prizes from "./Prizes";
 import Slabs from "./Slabs";
 import Inventory from "./Inventory";
@@ -14,6 +15,7 @@ import "./admin.css";
 
 const NAV = [
   ["", "Dashboard"],
+  ["setup", "Gifts by price"],
   ["prizes", "Prizes"],
   ["slabs", "Slabs & weights"],
   ["inventory", "Inventory"],
@@ -50,6 +52,7 @@ export default function AdminApp() {
       <main className="adm-main">
         <Routes>
           <Route index element={<Dashboard />} />
+          <Route path="setup" element={<QuickSetup />} />
           <Route path="prizes" element={<Prizes />} />
           <Route path="slabs" element={<Slabs />} />
           <Route path="inventory" element={<Inventory />} />
