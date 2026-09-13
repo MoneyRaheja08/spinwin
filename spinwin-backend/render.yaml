@@ -1,0 +1,34 @@
+# Render Blueprint — deploy the Spin & Win API + Postgres in one step.
+# Place this file at the repo ROOT (i.e. this = the spinwin-backend folder).
+# If you nest spinwin-backend inside a larger repo, add:  rootDir: spinwin-backend
+#
+# In Render: New +  ->  Blueprint  ->  pick this repo.
+
+services:
+  - type: web
+    name: spinwin-api
+    runtime: python
+    plan: starter                      # $7/mo, always-on. Use "free" only for testing.
+    buildCommand: pip install -r requirements.txt
+    # --workers 1 is REQUIRED: Socket.IO room state + the delayed PRIZE_WON
+    # task live in-process. Scaling past one worker needs a Redis manager
+    # (see DEPLOY.md).
+    startCommand: uvicorn app.main:sio_app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spinwin-db
+          property: connectionString   # internal URL; config.py rewrites it to asyncpg
+      - key: JWT_SECRET
+        generateValue: true            # Render generates a strong secret
+      - key: ANIMATION_SECONDS
+        value: "6"
+      - key: SESSION_TTL_MIN
+        value: "30"
+
+databases:
+  - name: spinwin-db
+    plan: basic-256mb                   # ~$6/mo. "free" plan expires 30 days after creation.
+    databaseName: spinwin
+    postgresMajorVersion: "16"

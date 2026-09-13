@@ -1,0 +1,62 @@
+# Render Blueprint for the FULL app (backend + database + frontend).
+# Put this file at the ROOT of a single GitHub repo laid out like:
+#
+#   spinwin/
+#   ├─ render.yaml            <-- this file
+#   ├─ spinwin-backend/
+#   ├─ spinwin-frontend/
+#   ├─ schema.sql
+#   └─ seed_demo.sql
+#
+# Then in Render:  New +  ->  Blueprint  ->  select this repo.
+# It creates all three services and wires them together automatically.
+
+databases:
+  - name: spinwin-db
+    plan: basic-256mb                 # ~$6/mo. "free" plan expires 30 days after creation.
+    databaseName: spinwin
+    postgresMajorVersion: "16"
+
+services:
+  # ---------- Backend API (FastAPI + Socket.IO) ----------
+  - type: web
+    name: spinwin-api
+    runtime: python
+    rootDir: spinwin-backend
+    plan: starter                     # $7/mo, always-on. "free" spins down after 15 min idle.
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:sio_app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spinwin-db
+          property: connectionString  # config.py rewrites it to the asyncpg driver
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ANIMATION_SECONDS
+        value: "6"
+
+  # ---------- Frontend (static Vite build) ----------
+  - type: web
+    name: spinwin-web
+    runtime: static
+    rootDir: spinwin-frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite                 # SPA fallback so /kiosk, /admin deep-links work
+        source: /*
+        destination: /index.html
+    envVars:
+      # auto-filled with the API's hostname; config.js adds https://
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: spinwin-api
+          property: host
+      - key: VITE_SOCKET_URL
+        fromService:
+          type: web
+          name: spinwin-api
+          property: host
