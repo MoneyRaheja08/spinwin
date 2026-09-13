@@ -1,16 +1,8 @@
 import { useState } from "react";
 import { get, post, patch, del, useAsync } from "./api";
 
-// Plain-language "how often" -> internal weight. Users never see numbers.
-const FREQ = [
-  { label: "Very often", weight: 50 },
-  { label: "Often", weight: 25 },
-  { label: "Sometimes", weight: 10 },
-  { label: "Rarely", weight: 4 },
-  { label: "Very rarely", weight: 1 },
-];
-
 const rupee = (n) => "\u20B9" + Number(n).toLocaleString("en-IN");
+const UNLIMITED = 1000000;
 
 async function loadAll() {
   const [slabs, prizes, inventory] = await Promise.all([
@@ -55,9 +47,9 @@ export default function QuickSetup() {
 
       <div className="card">
         <p className="muted" style={{ lineHeight: 1.6 }}>
-          <b>Step 1:</b> add a phone price range.<br />
-          <b>Step 2:</b> add gifts to it. Add <b>one</b> gift and everyone in that range wins it.
-          Add <b>several</b> and choose how often each should appear.
+          Add a phone price range, then type gift names under it.<br />
+          <b>One gift</b> = everyone in that range wins it. <b>Many gifts</b> = one is picked at random.<br />
+          <b>Per day</b> limits how many times a gift can be given each day (blank = no limit). When it runs out for the day, it stops appearing until tomorrow.
         </p>
         <div className="row">
           <input className="input sm" type="number" placeholder="From \u20B9" value={range.from}
@@ -80,33 +72,36 @@ export default function QuickSetup() {
 }
 
 function RangeCard({ slab, rules, prizes, inv, onChange }) {
-  const [g, setG] = useState({ name: "", stock: "", weight: 25 });
+  const [name, setName] = useState("");
+  const [perDay, setPerDay] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function addGift() {
-    if (!g.name.trim()) return;
+    if (!name.trim()) return;
     setBusy(true); setMsg("");
     try {
-      let prize = prizes.find((p) => p.name.trim().toLowerCase() === g.name.trim().toLowerCase());
-      if (!prize) prize = await post("/api/admin/prizes", { name: g.name.trim(), value: 0, is_active: true });
-
+      let prize = prizes.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+      if (!prize) prize = await post("/api/admin/prizes", { name: name.trim(), value: 0, is_active: true });
       if (rules.some((r) => r.prize_id === prize.id)) {
         setMsg("That gift is already in this range."); setBusy(false); return;
       }
-      const existingInv = inv[prize.id];
-      const stockVal = g.stock === "" ? 100000 : Number(g.stock);
-      if (!existingInv) await post("/api/admin/inventory", { prize_id: prize.id, quantity_initial: stockVal });
-      else if (g.stock) await post(`/api/admin/inventory/${existingInv.id}/restock`, { quantity: Number(g.stock) });
-
-      await post("/api/admin/rules", { slab_id: slab.id, prize_id: prize.id, weight: Number(g.weight) || 1 });
-      setG({ name: "", stock: "", weight: 25 });
+      if (!inv[prize.id]) await post("/api/admin/inventory", { prize_id: prize.id, quantity_initial: UNLIMITED });
+      await post("/api/admin/rules", {
+        slab_id: slab.id, prize_id: prize.id, weight: 1,
+        daily_limit: perDay === "" ? null : Number(perDay),
+      });
+      setName(""); setPerDay("");
       onChange();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function removeGift(ruleId) { await del(`/api/admin/rules/${ruleId}`); onChange(); }
+  async function setDaily(ruleId, val) {
+    await patch(`/api/admin/rules/${ruleId}`, { daily_limit: val === "" ? null : Number(val) });
+    onChange();
+  }
   async function removeRange() {
-    if (!window.confirm(`Remove the range "${slab.name}"? Its gifts stay saved but the range is hidden.`)) return;
+    if (!window.confirm(`Remove the range "${slab.name}"?`)) return;
     await patch(`/api/admin/slabs/${slab.id}`, { is_active: false });
     onChange();
   }
@@ -121,40 +116,34 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
       </div>
 
       <table className="table" style={{ marginTop: 10 }}>
-        <thead><tr><th>Gift</th><th>How often</th><th>Stock</th><th></th></tr></thead>
+        <thead><tr><th>Gift</th><th>Chance</th><th>Per day</th><th></th></tr></thead>
         <tbody>
-          {rules.map((r) => {
-            const stock = inv[r.prize_id];
-            const rem = stock ? stock.quantity_remaining : null;
-            return (
-              <tr key={r.id}>
-                <td>{r.prize_name}</td>
-                <td><b>{single ? "Always" : r.percentage + "%"}</b></td>
-                <td>{rem === null ? "\u2014" : rem > 99999 ? "\u221E" : rem}</td>
-                <td><button className="btn btn-ghost sm" onClick={() => removeGift(r.id)}>Remove</button></td>
-              </tr>
-            );
-          })}
+          {rules.map((r) => (
+            <tr key={r.id}>
+              <td>{r.prize_name}</td>
+              <td className="muted">{single ? "Always" : r.percentage + "%"}</td>
+              <td>
+                <input className="input sm" type="number" placeholder="\u221E" defaultValue={r.daily_limit ?? ""}
+                       onBlur={(e) => { const v = e.target.value; if (String(r.daily_limit ?? "") !== v) setDaily(r.id, v); }} />
+              </td>
+              <td style={{ textAlign: "right" }}>
+                <button className="btn btn-ghost sm" onClick={() => removeGift(r.id)}>Remove</button>
+              </td>
+            </tr>
+          ))}
           {!rules.length && <tr><td colSpan="4" className="muted">No gifts yet — add one below.</td></tr>}
         </tbody>
       </table>
 
       <div className="row" style={{ marginTop: 10 }}>
-        <input className="input" placeholder="Gift name (e.g. Free Watch)" value={g.name}
-               onChange={(e) => setG({ ...g, name: e.target.value })} />
-        <input className="input sm" type="number" placeholder="Stock (blank = lots)" value={g.stock}
-               onChange={(e) => setG({ ...g, stock: e.target.value })} />
-        <select className="input" value={g.weight} onChange={(e) => setG({ ...g, weight: e.target.value })}
-                title="How often this gift should come up">
-          {FREQ.map((f) => <option key={f.weight} value={f.weight}>{f.label}</option>)}
-        </select>
-        <button className="btn btn-gold" onClick={addGift} disabled={busy || !g.name.trim()}>Add gift</button>
+        <input className="input" placeholder="Gift name (e.g. Free Watch)" value={name}
+               onChange={(e) => setName(e.target.value)}
+               onKeyDown={(e) => e.key === "Enter" && addGift()} />
+        <input className="input sm" type="number" placeholder="Per day (blank = \u221E)" value={perDay}
+               onChange={(e) => setPerDay(e.target.value)} />
+        <button className="btn btn-gold" onClick={addGift} disabled={busy || !name.trim()}>Add gift</button>
       </div>
       {msg && <p className="adm-err">{msg}</p>}
-      <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-        “How often” only matters when a range has more than one gift. With one gift, it always wins.
-        When a gift runs out of stock, it drops off the wheel automatically.
-      </p>
     </div>
   );
 }

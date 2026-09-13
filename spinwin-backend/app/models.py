@@ -227,6 +227,7 @@ class PrizeRule(Base):
     prize_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("prizes.id", ondelete="CASCADE"))
     weight: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=1)
     max_winners: Mapped[int | None] = mapped_column(Integer)
+    daily_limit: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = _NOW()
     updated_at: Mapped[datetime] = _NOW()

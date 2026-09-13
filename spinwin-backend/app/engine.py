@@ -16,7 +16,7 @@ Guarantees:
 """
 import random
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
@@ -122,6 +122,10 @@ async def award_spin(session_id, actor_user_id=None):
                     inv_map[inv.prize_id] = inv
 
             today = datetime.now(timezone.utc).date()
+            # start of "today" in India time, expressed in UTC, for daily caps
+            _ist = timezone(timedelta(hours=5, minutes=30))
+            day_start_utc = datetime.now(_ist).replace(
+                hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
             candidates = []  # (rule, prize, inventory)
             for rule, prize in rule_rows:
                 if prize.expiry_date and prize.expiry_date < today:
@@ -143,6 +147,15 @@ async def award_spin(session_id, actor_user_id=None):
                                SpinResult.slab_id == slab_id)
                     )).scalar_one()
                     if won_slab >= rule.max_winners:
+                        continue
+                if rule.daily_limit is not None:
+                    won_today = (await db.execute(
+                        select(func.count()).select_from(SpinResult)
+                        .where(SpinResult.prize_id == prize.id,
+                               SpinResult.slab_id == slab_id,
+                               SpinResult.created_at >= day_start_utc)
+                    )).scalar_one()
+                    if won_today >= rule.daily_limit:
                         continue
                 candidates.append((rule, prize, inv))
 

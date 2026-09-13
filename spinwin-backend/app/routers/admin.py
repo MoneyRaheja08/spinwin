@@ -184,12 +184,14 @@ class RuleIn(BaseModel):
     prize_id: str
     weight: float = 1
     max_winners: int | None = None
+    daily_limit: int | None = None
     is_active: bool = True
 
 
 class RuleUpdate(BaseModel):
     weight: float | None = None
     max_winners: int | None = None
+    daily_limit: int | None = None
     is_active: bool | None = None
 
 
@@ -214,7 +216,8 @@ async def slab_rules(slab_id: str, db: AsyncSession = Depends(get_db), user=Depe
 @router.post("/rules")
 async def create_rule(body: RuleIn, db: AsyncSession = Depends(get_db), user=Depends(admin)):
     rule = PrizeRule(slab_id=uid(body.slab_id), prize_id=uid(body.prize_id),
-                     weight=body.weight, max_winners=body.max_winners, is_active=body.is_active)
+                     weight=body.weight, max_winners=body.max_winners,
+                     daily_limit=body.daily_limit, is_active=body.is_active)
     db.add(rule)
     await db.flush()
     _audit(db, user, "RULE_CREATE", "prize_rule", rule.id,
