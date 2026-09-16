@@ -12,6 +12,17 @@ const PLACEHOLDER = [
   { name: "Smartwatch" }, { name: "Cover" }, { name: "\u20B92000" },
 ];
 
+// A 1- or 2-gift range would draw as an ugly single blob, so repeat the
+// gifts into ~6 colourful segments. Landing on any copy is still correct.
+function displayWheel(list) {
+  const base = list && list.length ? list : PLACEHOLDER;
+  if (base.length >= 3) return base;
+  const times = Math.ceil(6 / base.length);
+  const out = [];
+  for (let i = 0; i < times; i++) out.push(...base);
+  return out;
+}
+
 export default function Kiosk() {
   const [phase, setPhase] = useState("enter"); // enter|checking|ready|spinning|result|error
   const [bill, setBill] = useState("");
@@ -66,7 +77,7 @@ export default function Kiosk() {
     setPhase("spinning");
     try {
       const res = await kioskSpin(sessionRef.current);   // server decides the prize
-      const w = wheel.length ? wheel : PLACEHOLDER;
+      const w = displayWheel(wheel);
       let idx = w.findIndex((x) => x.prize_id === res.prize_id);
       if (idx < 0) idx = 0;
       runCountdown();
@@ -112,7 +123,7 @@ export default function Kiosk() {
 
       <main className="tv-stage">
         <section className="tv-wheel">
-          <Wheel segments={wheel.length ? wheel : PLACEHOLDER} rotation={rotation}
+          <Wheel segments={displayWheel(wheel)} rotation={rotation}
                  duration={SPIN_SECONDS} spinning={spinning} />
           {countdown !== null && <div className="countdown">{countdown}</div>}
         </section>
