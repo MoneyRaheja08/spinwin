@@ -6,7 +6,7 @@ import * as sound from "../sound";
 import Wheel, { targetRotation } from "../components/Wheel";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv") || "TV-001";
-const SPIN_SECONDS = 5.5;
+const SPIN_SECONDS = 5;
 const PLACEHOLDER = [
   { name: "\u20B9100" }, { name: "\u20B9500" }, { name: "Earphones" },
   { name: "Smartwatch" }, { name: "Cover" }, { name: "\u20B92000" },

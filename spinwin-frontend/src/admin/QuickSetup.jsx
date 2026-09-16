@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { get, post, patch, del, useAsync } from "./api";
 
-const rupee = (n) => "\u20B9" + Number(n).toLocaleString("en-IN");
+const rupee = (n) => "₹" + Number(n).toLocaleString("en-IN");
 const UNLIMITED = 1000000;
 
 async function loadAll() {
@@ -27,14 +27,14 @@ export default function QuickSetup() {
     try {
       const from = Number(range.from);
       const to = range.to === "" ? null : Number(range.to);
-      const name = `${rupee(from)} \u2013 ${to ? rupee(to) : "above"}`;
+      const name = `${rupee(from)} – ${to ? rupee(to) : "above"}`;
       await post("/api/admin/slabs", { name, min_price: from, max_price: to, priority: from });
       setRange({ from: "", to: "" });
       reload();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
 
-  if (loading) return <p className="muted">Loading\u2026</p>;
+  if (loading) return <p className="muted">Loading…</p>;
   if (error) return <p className="adm-err">{error}</p>;
 
   const invByPrize = {};
@@ -49,13 +49,14 @@ export default function QuickSetup() {
         <p className="muted" style={{ lineHeight: 1.6 }}>
           Add a phone price range, then type gift names under it.<br />
           <b>One gift</b> = everyone in that range wins it. <b>Many gifts</b> = one is picked at random.<br />
-          <b>Per day</b> limits how many times a gift can be given each day (blank = no limit). When it runs out for the day, it stops appearing until tomorrow.
+          <b>Chance</b> is relative — a gift with 3 comes up 3× as often as one with 1.
+          <b> Per day</b> limits how many times a gift can be given each day (blank = no limit).
         </p>
         <div className="row">
-          <input className="input sm" type="number" placeholder="From \u20B9" value={range.from}
+          <input className="input sm" type="number" placeholder="From ₹" value={range.from}
                  onChange={(e) => setRange({ ...range, from: e.target.value })} />
           <span className="muted">to</span>
-          <input className="input sm" type="number" placeholder="To \u20B9 (blank = & above)" value={range.to}
+          <input className="input sm" type="number" placeholder="To ₹ (blank = & above)" value={range.to}
                  onChange={(e) => setRange({ ...range, to: e.target.value })} />
           <button className="btn btn-gold" onClick={addRange} disabled={busy || range.from === ""}>Add price range</button>
         </div>
@@ -96,6 +97,10 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function removeGift(ruleId) { await del(`/api/admin/rules/${ruleId}`); onChange(); }
+  async function setWeight(ruleId, val) {
+    await patch(`/api/admin/rules/${ruleId}`, { weight: Number(val) || 1 });
+    onChange();
+  }
   async function setDaily(ruleId, val) {
     await patch(`/api/admin/rules/${ruleId}`, { daily_limit: val === "" ? null : Number(val) });
     onChange();
@@ -121,9 +126,17 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
           {rules.map((r) => (
             <tr key={r.id}>
               <td>{r.prize_name}</td>
-              <td className="muted">{single ? "Always" : r.percentage + "%"}</td>
               <td>
-                <input className="input sm" type="number" placeholder="\u221E" defaultValue={r.daily_limit ?? ""}
+                {single ? <span className="muted">Always</span> : (
+                  <span className="row" style={{ gap: 8 }}>
+                    <input className="input sm" type="number" defaultValue={r.weight}
+                           onBlur={(e) => { const v = e.target.value; if (v !== "" && String(r.weight) !== v) setWeight(r.id, v); }} />
+                    <span className="muted">{r.percentage}%</span>
+                  </span>
+                )}
+              </td>
+              <td>
+                <input className="input sm" type="number" placeholder="∞" defaultValue={r.daily_limit ?? ""}
                        onBlur={(e) => { const v = e.target.value; if (String(r.daily_limit ?? "") !== v) setDaily(r.id, v); }} />
               </td>
               <td style={{ textAlign: "right" }}>
@@ -139,7 +152,7 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
         <input className="input" placeholder="Gift name (e.g. Free Watch)" value={name}
                onChange={(e) => setName(e.target.value)}
                onKeyDown={(e) => e.key === "Enter" && addGift()} />
-        <input className="input sm" type="number" placeholder="Per day (blank = \u221E)" value={perDay}
+        <input className="input sm" type="number" placeholder="Per day (blank = ∞)" value={perDay}
                onChange={(e) => setPerDay(e.target.value)} />
         <button className="btn btn-gold" onClick={addGift} disabled={busy || !name.trim()}>Add gift</button>
       </div>
