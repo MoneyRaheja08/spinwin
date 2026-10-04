@@ -12,7 +12,7 @@ export default function Staff() {
 }
 
 function RegisterBill() {
-  const [f, setF] = useState({ customer_name: "", bill_number: "", model: "", price: "" });
+  const [f, setF] = useState({ customer_name: "", bill_number: "", price: "" });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -23,11 +23,10 @@ function RegisterBill() {
       const r = await post("/api/staff/bills", {
         customer_name: f.customer_name.trim(),
         bill_number: f.bill_number.trim(),
-        model: f.model.trim(),
         price: Number(f.price),
       });
       setMsg(`\u2713 Bill ${r.bill_number} created for ${r.customer_name}. They can now spin at the TV.`);
-      setF({ customer_name: "", bill_number: "", model: "", price: "" });
+      setF({ customer_name: "", bill_number: "", price: "" });
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
 
@@ -39,8 +38,6 @@ function RegisterBill() {
           <input className="input" value={f.customer_name} onChange={(e) => setF({ ...f, customer_name: e.target.value })} /></label>
         <label className="field"><span>Bill number</span>
           <input className="input" value={f.bill_number} onChange={(e) => setF({ ...f, bill_number: e.target.value })} /></label>
-        <label className="field"><span>Mobile model</span>
-          <input className="input" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} /></label>
         <label className="field"><span>Price</span>
           <input className="input" type="number" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></label>
       </div>
