@@ -8,7 +8,7 @@ import "../admin/admin.css";
 export default function Staff() {
   const [authed, setAuthed] = useState(isAuthed());
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
-  return <Console onSignOut={() => { logout(); setAuthed(false); }} />;
+  return <Console onSignOut={() => { logout(); window.location.assign("/staff"); }} />;
 }
 
 function RegisterBill() {

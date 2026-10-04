@@ -93,8 +93,8 @@ async def eligibility(body: EligibilityIn, db: AsyncSession = Depends(get_db)):
 class StaffBillIn(BaseModel):
     customer_name: str
     bill_number: str
-    model: str
     price: float
+    model: str | None = None
     mobile: str | None = None
     store_id: str | None = None
 

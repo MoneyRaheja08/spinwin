@@ -41,7 +41,7 @@ export default function Wheel({ segments, rotation, duration, spinning }) {
         className="wheel-spinner"
         style={{
           transform: `rotate(${rotation}deg)`,
-          transition: spinning ? `transform ${duration}s cubic-bezier(.15,.62,.18,1)` : "none",
+          transition: spinning ? `transform ${duration}s cubic-bezier(0.16, 0.84, 0.30, 1)` : "none",
         }}
       >
         <svg viewBox={`0 0 ${size} ${size}`} className="wheel-svg">

@@ -4,6 +4,7 @@ import { isAuthed, logout, role } from "./api";
 import { branding } from "../branding";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
+import AddCustomer from "./AddCustomer";
 import QuickSetup from "./QuickSetup";
 import Prizes from "./Prizes";
 import Slabs from "./Slabs";
@@ -15,6 +16,7 @@ import "./admin.css";
 
 const NAV = [
   ["", "Dashboard"],
+  ["add-customer", "Add customer"],
   ["setup", "Gifts by price"],
   ["prizes", "Prizes"],
   ["slabs", "Slabs & weights"],
@@ -30,7 +32,7 @@ export default function AdminApp() {
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 
-  function signOut() { logout(); setAuthed(false); nav("/admin"); }
+  function signOut() { logout(); window.location.assign("/admin"); }
 
   return (
     <div className="adm">
@@ -52,6 +54,7 @@ export default function AdminApp() {
       <main className="adm-main">
         <Routes>
           <Route index element={<Dashboard />} />
+          <Route path="add-customer" element={<AddCustomer />} />
           <Route path="setup" element={<QuickSetup />} />
           <Route path="prizes" element={<Prizes />} />
           <Route path="slabs" element={<Slabs />} />
