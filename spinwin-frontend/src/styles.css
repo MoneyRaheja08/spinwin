@@ -188,3 +188,11 @@ body {
   animation: greet 0.5s ease;
 }
 @keyframes greet { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* ============================== Win prize photo ============================== */
+.win-img {
+  max-width: 180px; max-height: 180px; width: auto; height: auto;
+  border-radius: 16px; margin: 0 auto 10px; display: block;
+  object-fit: contain; background: rgba(255,255,255,0.08); padding: 6px;
+}
+.tv .win-img { max-width: 24vh; max-height: 24vh; }

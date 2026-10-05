@@ -74,6 +74,7 @@ export default function QuickSetup() {
 
 function RangeCard({ slab, rules, prizes, inv, onChange }) {
   const [name, setName] = useState("");
+  const [image, setImage] = useState("");
   const [perDay, setPerDay] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -83,7 +84,11 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
     setBusy(true); setMsg("");
     try {
       let prize = prizes.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
-      if (!prize) prize = await post("/api/admin/prizes", { name: name.trim(), value: 0, is_active: true });
+      if (!prize) prize = await post("/api/admin/prizes", {
+        name: name.trim(), value: 0, is_active: true,
+        image_url: image.trim() || null,
+      });
+      else if (image.trim()) await patch(`/api/admin/prizes/${prize.id}`, { image_url: image.trim() });
       if (rules.some((r) => r.prize_id === prize.id)) {
         setMsg("That gift is already in this range."); setBusy(false); return;
       }
@@ -92,11 +97,18 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
         slab_id: slab.id, prize_id: prize.id, weight: 1,
         daily_limit: perDay === "" ? null : Number(perDay),
       });
-      setName(""); setPerDay("");
+      setName(""); setImage(""); setPerDay("");
       onChange();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function removeGift(ruleId) { await del(`/api/admin/rules/${ruleId}`); onChange(); }
+  async function setPhoto(prizeId, prizeName) {
+    const cur = (prizes.find((p) => p.id === prizeId) || {}).image_url || "";
+    const url = window.prompt(`Photo link for "${prizeName}" (paste an image URL, or leave blank to remove):`, cur);
+    if (url === null) return;
+    await patch(`/api/admin/prizes/${prizeId}`, { image_url: url.trim() || null });
+    onChange();
+  }
   async function setWeight(ruleId, val) {
     await patch(`/api/admin/rules/${ruleId}`, { weight: Number(val) || 1 });
     onChange();
@@ -140,6 +152,7 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
                        onBlur={(e) => { const v = e.target.value; if (String(r.daily_limit ?? "") !== v) setDaily(r.id, v); }} />
               </td>
               <td style={{ textAlign: "right" }}>
+                <button className="btn btn-ghost sm" onClick={() => setPhoto(r.prize_id, r.prize_name)}>Photo</button>
                 <button className="btn btn-ghost sm" onClick={() => removeGift(r.id)}>Remove</button>
               </td>
             </tr>
@@ -152,6 +165,8 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
         <input className="input" placeholder="Gift name (e.g. Free Watch)" value={name}
                onChange={(e) => setName(e.target.value)}
                onKeyDown={(e) => e.key === "Enter" && addGift()} />
+        <input className="input" placeholder="Photo link (optional)" value={image}
+               onChange={(e) => setImage(e.target.value)} />
         <input className="input sm" type="number" placeholder="Per day (blank = ∞)" value={perDay}
                onChange={(e) => setPerDay(e.target.value)} />
         <button className="btn btn-gold" onClick={addGift} disabled={busy || !name.trim()}>Add gift</button>

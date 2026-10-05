@@ -91,6 +91,9 @@ export default function Play() {
       {step === "result" && result && (
         <div className="play-card win">
           <p className="play-kicker">You won</p>
+          {result.prize_image && (
+            <img className="win-img" src={result.prize_image} alt={result.prize_name} />
+          )}
           <h1 className="play-prize">{result.prize_name}</h1>
           {result.prize_value > 0 && (
             <p className="play-value">{branding.currency}{result.prize_value.toLocaleString("en-IN")}</p>

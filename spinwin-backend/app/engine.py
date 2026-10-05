@@ -261,6 +261,7 @@ async def award_spin(session_id, actor_user_id=None):
                 "prize_id": str(prize.id),
                 "prize_name": prize.name,
                 "prize_value": float(prize.value),
+                "prize_image": prize.image_url,
                 "is_forced": forced,
                 "slab_id": str(slab_id),
             }

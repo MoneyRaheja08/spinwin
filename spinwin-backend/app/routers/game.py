@@ -408,8 +408,14 @@ async def tv_state(tv_code: str, db: AsyncSession = Depends(get_db)):
         )).scalar_one_or_none()
         result = None
         if res:
+            img = None
+            if res.prize_id:
+                img = (await db.execute(
+                    select(Prize.image_url).where(Prize.id == res.prize_id)
+                )).scalar_one_or_none()
             result = {"prize_id": str(res.prize_id) if res.prize_id else None,
-                      "prize_name": res.prize_name, "prize_value": float(res.prize_value)}
+                      "prize_name": res.prize_name, "prize_value": float(res.prize_value),
+                      "prize_image": img}
         return {"status": "done", "session_id": str(sess.id), "customer_name": cname,
                 "wheel": wheel, "display_wheel": display_wheel, "result": result,
                 "spun_at": sess.completed_at.isoformat() if sess.completed_at else None}
