@@ -69,7 +69,7 @@ export default function Tv() {
     if (s.status === "ready") {
       if (shownSessionRef.current !== s.session_id) {
         shownSessionRef.current = s.session_id;
-        setWheel(s.wheel || []);
+        setWheel(s.display_wheel || s.wheel || []);
         setCustomerName(s.customer_name || null);
         setResult(null); setSpinning(false); setRotation(0); rotRef.current = 0;
         setPhase("ready");
@@ -83,8 +83,9 @@ export default function Tv() {
       if (animatedRef.current !== s.session_id) {
         animatedRef.current = s.session_id;
         shownSessionRef.current = s.session_id;
-        const w = displayWheel(s.wheel && s.wheel.length ? s.wheel : wheel);
-        setWheel(s.wheel || []);
+        const full = s.display_wheel || s.wheel || wheel;
+        const w = displayWheel(full);
+        setWheel(full);
         setPhase("spinning");
         runCountdown();
         let idx = w.findIndex((x) => x.prize_id === s.result.prize_id);

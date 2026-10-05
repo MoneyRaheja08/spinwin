@@ -61,7 +61,8 @@ export default function Kiosk() {
         setPhase("error");
         return;
       }
-      setWheel(e.wheel && e.wheel.length ? e.wheel : PLACEHOLDER);
+      setWheel((e.display_wheel && e.display_wheel.length ? e.display_wheel
+               : (e.wheel && e.wheel.length ? e.wheel : PLACEHOLDER)));
       setCustomerName(e.customer_name || null);
       const s = await createSession(e.bill_id, TV_CODE);
       sessionRef.current = s.session_id;

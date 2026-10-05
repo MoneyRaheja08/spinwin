@@ -12,11 +12,34 @@ from ..config import settings
 from ..db import get_db
 from ..engine import SpinError, award_spin, resolve_slab
 from ..models import (
-    AuditLog, Bill, BillItem, BillSpinStatus, Customer, Prize, SessionStatus,
-    SpinResult, SpinSession, Store, TvDevice, User, UserRole,
+    AuditLog, Bill, BillItem, BillSpinStatus, Customer, PriceSlab, Prize,
+    PrizeRule, SessionStatus, SpinResult, SpinSession, Store, TvDevice, User,
+    UserRole,
 )
 from ..realtime import _wheel_for_slab, sio
 from ..security import get_current_user, require_roles
+
+
+async def _all_gifts_wheel(db, store_id):
+    """Every gift across all active price ranges for this store — used to make
+    the wheel look full. The customer still only WINS from their own range."""
+    rows = (await db.execute(
+        select(Prize)
+        .join(PrizeRule, PrizeRule.prize_id == Prize.id)
+        .join(PriceSlab, PriceSlab.id == PrizeRule.slab_id)
+        .where(PrizeRule.is_active.is_(True), Prize.is_active.is_(True),
+               PriceSlab.is_active.is_(True),
+               (PriceSlab.store_id == store_id) | (PriceSlab.store_id.is_(None)))
+        .order_by(Prize.priority)
+    )).scalars().all()
+    seen, out = set(), []
+    for p in rows:
+        if p.id in seen:
+            continue
+        seen.add(p.id)
+        out.append({"prize_id": str(p.id), "name": p.name,
+                    "value": float(p.value), "image_url": p.image_url})
+    return out
 
 router = APIRouter(prefix="/api", tags=["game"])
 
@@ -87,6 +110,7 @@ async def eligibility(body: EligibilityIn, db: AsyncSession = Depends(get_db)):
                   "price": float(item.selling_price)} if item else None),
         "slab": ({"id": str(slab.id), "name": slab.name} if slab else None),
         "wheel": wheel,
+        "display_wheel": await _all_gifts_wheel(db, store_id),
     }
 
 
@@ -339,7 +363,8 @@ async def public_register(body: PublicRegisterIn, db: AsyncSession = Depends(get
 
     wheel = await _wheel_for_slab(db, slab.id)
     return {"session_id": str(sess.id), "customer_name": cust.name,
-            "slab": slab.name, "wheel": wheel}
+            "slab": slab.name, "wheel": wheel,
+            "display_wheel": await _all_gifts_wheel(db, tv.store_id)}
 
 
 @router.get("/tv/{tv_code}/state")
@@ -368,6 +393,7 @@ async def tv_state(tv_code: str, db: AsyncSession = Depends(get_db)):
             select(Customer.name).where(Customer.id == sess.customer_id)
         )).scalar_one_or_none()
     wheel = await _wheel_for_slab(db, sess.price_slab_id) if sess.price_slab_id else []
+    display_wheel = await _all_gifts_wheel(db, sess.store_id)
 
     if sess.status == SessionStatus.COMPLETED:
         # auto-return to idle ~30s after the win so the TV shows the QR again
@@ -385,11 +411,11 @@ async def tv_state(tv_code: str, db: AsyncSession = Depends(get_db)):
             result = {"prize_id": str(res.prize_id) if res.prize_id else None,
                       "prize_name": res.prize_name, "prize_value": float(res.prize_value)}
         return {"status": "done", "session_id": str(sess.id), "customer_name": cname,
-                "wheel": wheel, "result": result,
+                "wheel": wheel, "display_wheel": display_wheel, "result": result,
                 "spun_at": sess.completed_at.isoformat() if sess.completed_at else None}
 
-    return {"status": "ready", "session_id": str(sess.id),
-            "customer_name": cname, "wheel": wheel}
+    return {"status": "ready", "session_id": str(sess.id), "customer_name": cname,
+            "wheel": wheel, "display_wheel": display_wheel}
 
 
 @router.get("/my/tv-devices")
