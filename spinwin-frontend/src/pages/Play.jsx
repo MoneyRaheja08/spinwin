@@ -115,9 +115,6 @@ export default function Play() {
             <img className="win-img" src={result.prize_image} alt={result.prize_name} />
           )}
           <h1 className="play-prize">{result.prize_name}</h1>
-          {result.prize_value > 0 && (
-            <p className="play-value">{branding.currency}{result.prize_value.toLocaleString("en-IN")}</p>
-          )}
           <p className="play-sub">Show this at the counter to collect.</p>
           <button className="play-btn" onClick={reset}>Done</button>
         </div>

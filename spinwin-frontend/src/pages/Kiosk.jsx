@@ -176,9 +176,6 @@ export default function Kiosk() {
                 <img className="win-img" src={result.prize_image} alt={result.prize_name} />
               )}
               <h2 className="win-prize">{result.prize_name}</h2>
-              {result.prize_value > 0 && (
-                <p className="win-value">{branding.currency}{result.prize_value.toLocaleString("en-IN")}</p>
-              )}
               <button className="kiosk-cta" onClick={reset}>Next customer</button>
             </div>
           )}
