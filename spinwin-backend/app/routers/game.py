@@ -387,6 +387,16 @@ async def tv_state(tv_code: str, db: AsyncSession = Depends(get_db)):
         await db.commit()
         return {"status": "idle"}
 
+    # Self-heal: a customer who connected but never spun shouldn't hide the QR
+    # forever. Drop a stale un-played session after 3 minutes so the TV shows
+    # the QR again for the next customer.
+    if sess.status != SessionStatus.COMPLETED:
+        started = sess.connected_at or sess.created_at
+        if started and (datetime.now(timezone.utc) - started).total_seconds() > 180:
+            tv.active_session_id = None
+            await db.commit()
+            return {"status": "idle"}
+
     cname = None
     if sess.customer_id:
         cname = (await db.execute(
@@ -396,10 +406,10 @@ async def tv_state(tv_code: str, db: AsyncSession = Depends(get_db)):
     display_wheel = await _all_gifts_wheel(db, sess.store_id)
 
     if sess.status == SessionStatus.COMPLETED:
-        # auto-return to idle ~30s after the win so the TV shows the QR again
+        # auto-return to idle ~20s after the win so the TV shows the QR again
         if sess.completed_at:
             age = (datetime.now(timezone.utc) - sess.completed_at).total_seconds()
-            if age > 30:
+            if age > 20:
                 tv.active_session_id = None
                 await db.commit()
                 return {"status": "idle"}
