@@ -300,18 +300,35 @@ async def kiosk_spin(session_id: str, db: AsyncSession = Depends(get_db)):
 #  Reliable on a single Render instance, no Redis needed.
 # ========================================================================
 
+@router.get("/tv/{tv_code}/categories")
+async def tv_categories(tv_code: str, db: AsyncSession = Depends(get_db)):
+    """Categories the customer can pick from (active pools for this TV's store)."""
+    tv = (await db.execute(
+        select(TvDevice).where(TvDevice.code == tv_code)
+    )).scalar_one_or_none()
+    if not tv:
+        raise HTTPException(404, "Unknown TV")
+    rows = (await db.execute(
+        select(PriceSlab).where(
+            PriceSlab.is_active.is_(True),
+            (PriceSlab.store_id == tv.store_id) | (PriceSlab.store_id.is_(None)),
+        ).order_by(PriceSlab.priority, PriceSlab.name)
+    )).scalars().all()
+    return [{"id": str(s.id), "name": s.name} for s in rows]
+
+
 class PublicRegisterIn(BaseModel):
     tv_code: str
     customer_name: str
     bill_number: str
-    price: float
+    category_id: str
 
 
 @router.post("/public/register")
 async def public_register(body: PublicRegisterIn, db: AsyncSession = Depends(get_db)):
-    """Customer self-registers from their phone (scanned the TV QR). Creates
-    the customer + bill + session and attaches it to the TV so the TV screen
-    shows the wheel. No login required."""
+    """Customer self-registers from their phone (scanned the TV QR): name, bill
+    number and the CATEGORY they pick. Creates the customer + bill + session and
+    attaches it to the TV. No login required."""
     tv = (await db.execute(
         select(TvDevice).where(TvDevice.code == body.tv_code)
     )).scalar_one_or_none()
@@ -320,15 +337,18 @@ async def public_register(body: PublicRegisterIn, db: AsyncSession = Depends(get
     if not body.customer_name.strip() or not body.bill_number.strip():
         raise HTTPException(400, "Name and bill number are required")
 
+    category = (await db.execute(
+        select(PriceSlab).where(PriceSlab.id == _uid(body.category_id),
+                                PriceSlab.is_active.is_(True))
+    )).scalar_one_or_none()
+    if not category:
+        raise HTTPException(400, "Please choose a valid category")
+
     dup = (await db.execute(select(Bill).where(
         Bill.store_id == tv.store_id, Bill.bill_number == body.bill_number.strip()
     ))).scalar_one_or_none()
     if dup:
         raise HTTPException(400, "This bill number has already been used")
-
-    slab = await resolve_slab(db, body.price, tv.store_id)
-    if not slab:
-        raise HTTPException(400, "No prize range is set for this price yet")
 
     cust = Customer(name=body.customer_name.strip(),
                     mobile=f"NA-{body.bill_number.strip()}-{secrets.token_hex(2)}")
@@ -336,18 +356,18 @@ async def public_register(body: PublicRegisterIn, db: AsyncSession = Depends(get
     await db.flush()
 
     bill = Bill(store_id=tv.store_id, bill_number=body.bill_number.strip(),
-                customer_id=cust.id, total_amount=body.price, spin_eligible=True,
+                customer_id=cust.id, spin_eligible=True,
                 spins_allowed=1, spins_used=0, spin_status=BillSpinStatus.NOT_PLAYED)
     db.add(bill)
     await db.flush()
-    item = BillItem(bill_id=bill.id, selling_price=body.price, is_spin_item=True)
+    item = BillItem(bill_id=bill.id, model=category.name, selling_price=0, is_spin_item=True)
     db.add(item)
     await db.flush()
 
     code = "SPN-" + secrets.token_urlsafe(9)
     sess = SpinSession(
         store_id=tv.store_id, bill_id=bill.id, bill_item_id=item.id,
-        customer_id=cust.id, price_slab_id=slab.id, qualifying_price=body.price,
+        customer_id=cust.id, price_slab_id=category.id,
         pairing_code=code, status=SessionStatus.CONNECTED,
         tv_device_id=tv.id, connected_at=datetime.now(timezone.utc),
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.SESSION_TTL_MIN),
@@ -357,13 +377,13 @@ async def public_register(body: PublicRegisterIn, db: AsyncSession = Depends(get
     tv.active_session_id = sess.id
     db.add(AuditLog(actor_role="CUSTOMER", action="BILL_CREATE", entity_type="bill",
                     entity_id=bill.id, store_id=tv.store_id,
-                    meta_data={"bill_number": bill.bill_number, "price": body.price,
-                               "via": "phone"}))
+                    meta_data={"bill_number": bill.bill_number,
+                               "category": category.name, "via": "phone"}))
     await db.commit()
 
-    wheel = await _wheel_for_slab(db, slab.id)
+    wheel = await _wheel_for_slab(db, category.id)
     return {"session_id": str(sess.id), "customer_name": cust.name,
-            "slab": slab.name, "wheel": wheel,
+            "category": category.name, "wheel": wheel,
             "display_wheel": await _all_gifts_wheel(db, tv.store_id)}
 
 

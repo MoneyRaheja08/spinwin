@@ -1,22 +1,20 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { checkEligibility, createSession, kioskSpin } from "../api";
+import { getCategories, registerPublic, kioskSpin } from "../api";
 import { branding } from "../branding";
 import * as sound from "../sound";
 import Wheel, { spinPlan } from "../components/Wheel";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv") || "TV-001";
-const PHASE = 4;                  // seconds per phase
-const SPIN_SECONDS = PHASE * 2;   // 4s clockwise + 4s anticlockwise
-const EASE_IN = "cubic-bezier(0.45, 0, 0.9, 0.6)";   // accelerate
-const EASE_OUT = "cubic-bezier(0.1, 0.7, 0.2, 1)";    // decelerate to stop
+const PHASE = 4;
+const SPIN_SECONDS = PHASE * 2;
+const EASE_IN = "cubic-bezier(0.45, 0, 0.9, 0.6)";
+const EASE_OUT = "cubic-bezier(0.1, 0.7, 0.2, 1)";
 const PLACEHOLDER = [
-  { name: "\u20B9100" }, { name: "\u20B9500" }, { name: "Earphones" },
-  { name: "Smartwatch" }, { name: "Cover" }, { name: "\u20B92000" },
+  { name: "₹100" }, { name: "₹500" }, { name: "Earphones" },
+  { name: "Smartwatch" }, { name: "Cover" }, { name: "₹2000" },
 ];
 
-// A 1- or 2-gift range would draw as an ugly single blob, so repeat the
-// gifts into ~6 colourful segments. Landing on any copy is still correct.
 function displayWheel(list) {
   const base = list && list.length ? list : PLACEHOLDER;
   if (base.length >= 3) return base;
@@ -27,22 +25,24 @@ function displayWheel(list) {
 }
 
 export default function Kiosk() {
-  const [phase, setPhase] = useState("enter"); // enter|checking|ready|spinning|result|error
+  const [phase, setPhase] = useState("enter"); // enter|category|registering|ready|spinning|result|error
   const [bill, setBill] = useState("");
+  const [cats, setCats] = useState([]);
   const [wheel, setWheel] = useState([]);
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [easing, setEasing] = useState(EASE_OUT);
   const [result, setResult] = useState(null);
-  const [customerName, setCustomerName] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [msg, setMsg] = useState("");
   const sessionRef = useRef(null);
   const rotRef = useRef(0);
 
+  useEffect(() => { getCategories(TV_CODE).then(setCats).catch(() => {}); }, []);
+
   function reset() {
     sessionRef.current = null;
-    setPhase("enter"); setBill(""); setWheel([]); setResult(null); setCustomerName(null);
+    setPhase("enter"); setBill(""); setWheel([]); setResult(null);
     setRotation(0); rotRef.current = 0; setSpinning(false); setMsg("");
   }
 
@@ -54,22 +54,19 @@ export default function Kiosk() {
     else setBill((b) => (b + d).slice(0, 20));
   }
 
-  async function check() {
+  function toCategory() {
     if (!bill.trim()) return;
+    sound.unlock(); setMsg(""); setPhase("category");
+  }
+
+  async function pickCategory(catId) {
     sound.unlock();
-    setPhase("checking"); setMsg("");
+    setPhase("registering"); setMsg("");
     try {
-      const e = await checkEligibility(TV_CODE, bill.trim());
-      if (!e.eligible) {
-        setMsg(e.spin_status === "PLAYED" ? "This bill has already been used to spin." : "This bill isn't eligible to spin.");
-        setPhase("error");
-        return;
-      }
-      setWheel((e.display_wheel && e.display_wheel.length ? e.display_wheel
-               : (e.wheel && e.wheel.length ? e.wheel : PLACEHOLDER)));
-      setCustomerName(e.customer_name || null);
-      const s = await createSession(e.bill_id, TV_CODE);
-      sessionRef.current = s.session_id;
+      const r = await registerPublic(TV_CODE, "Guest", bill.trim(), catId);
+      sessionRef.current = r.session_id;
+      setWheel(r.display_wheel && r.display_wheel.length ? r.display_wheel
+               : (r.wheel && r.wheel.length ? r.wheel : PLACEHOLDER));
       setPhase("ready");
     } catch (err) {
       setMsg(err.message); setPhase("error");
@@ -81,16 +78,14 @@ export default function Kiosk() {
     sound.unlock();
     setPhase("spinning");
     try {
-      const res = await kioskSpin(sessionRef.current);   // server decides the prize
+      const res = await kioskSpin(sessionRef.current);
       const w = displayWheel(wheel);
       let idx = w.findIndex((x) => x.prize_id === res.prize_id);
       if (idx < 0) idx = 0;
       runCountdown();
       const { p1, p2 } = spinPlan(idx, w.length, rotRef.current);
-      // phase 1: clockwise
       setEasing(EASE_IN);
       requestAnimationFrame(() => { setSpinning(true); setRotation(p1); rotRef.current = p1; });
-      // phase 2: anticlockwise, lands on the winner
       setTimeout(() => { setEasing(EASE_OUT); setRotation(p2); rotRef.current = p2; }, PHASE * 1000);
       setTimeout(() => { setResult(res); setPhase("result"); fire(); sound.win(); }, SPIN_SECONDS * 1000);
     } catch (err) {
@@ -127,8 +122,6 @@ export default function Kiosk() {
         <span style={{ width: "6vh" }} />
       </header>
 
-      {customerName && <div className="tv-greeting">Namaste, {customerName}! 🙏</div>}
-
       <main className="tv-stage">
         <section className="tv-wheel">
           <Wheel segments={displayWheel(wheel)} rotation={rotation}
@@ -137,26 +130,36 @@ export default function Kiosk() {
         </section>
 
         <aside className="tv-panel">
-          {(phase === "enter" || phase === "checking") && (
+          {phase === "enter" && (
             <div className="panel-card">
               <h2 className="panel-h">Enter bill number</h2>
-              <div className="kiosk-display">{bill || "\u2014"}</div>
+              <div className="kiosk-display">{bill || "—"}</div>
               <div className="kiosk-pad">
                 {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"].map((k) => (
                   <button key={k} className={`pad-key ${k === "clr" || k === "del" ? "pad-fn" : ""}`} onClick={() => key(k)}>
-                    {k === "del" ? "\u232B" : k === "clr" ? "C" : k}
+                    {k === "del" ? "⌫" : k === "clr" ? "C" : k}
                   </button>
                 ))}
               </div>
-              <button className="kiosk-cta" onClick={check} disabled={phase === "checking" || !bill}>
-                {phase === "checking" ? "Checking…" : "Check & play"}
-              </button>
+              <button className="kiosk-cta" onClick={toCategory} disabled={!bill}>Continue</button>
+            </div>
+          )}
+
+          {(phase === "category" || phase === "registering") && (
+            <div className="panel-card">
+              <h2 className="panel-h">Choose category</h2>
+              <div className="tv-cats">
+                {cats.map((c) => (
+                  <button key={c.id} className="tv-cat-btn" onClick={() => pickCategory(c.id)}>{c.name}</button>
+                ))}
+                {!cats.length && <p className="panel-sub">No categories set up yet.</p>}
+              </div>
             </div>
           )}
 
           {phase === "ready" && (
             <div className="panel-card">
-              <h2 className="panel-h">Namaste{customerName ? ", " + customerName : ""}!</h2>
+              <h2 className="panel-h">Ready!</h2>
               <p className="panel-kicker">You have 1 spin</p>
               <button className="kiosk-cta big" onClick={spin}>SPIN</button>
             </div>
@@ -168,7 +171,7 @@ export default function Kiosk() {
 
           {phase === "result" && result && (
             <div className="panel-card win">
-              <p className="panel-kicker">Congratulations{customerName ? ", " + customerName : ""}!</p>
+              <p className="panel-kicker">Congratulations!</p>
               {result.prize_image && (
                 <img className="win-img" src={result.prize_image} alt={result.prize_name} />
               )}

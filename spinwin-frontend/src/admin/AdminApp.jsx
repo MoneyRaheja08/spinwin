@@ -17,7 +17,7 @@ import "./admin.css";
 const NAV = [
   ["", "Dashboard"],
   ["add-customer", "Add customer"],
-  ["setup", "Gifts by price"],
+  ["setup", "Categories & gifts"],
   ["prizes", "Prizes"],
   ["slabs", "Slabs & weights"],
   ["inventory", "Inventory"],

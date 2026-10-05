@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { get, post, patch, del, useAsync } from "./api";
 
-const rupee = (n) => "₹" + Number(n).toLocaleString("en-IN");
 const UNLIMITED = 1000000;
 
 async function loadAll() {
@@ -17,20 +16,16 @@ async function loadAll() {
 
 export default function QuickSetup() {
   const { data, loading, error, reload } = useAsync(loadAll);
-  const [range, setRange] = useState({ from: "", to: "" });
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  async function addRange() {
-    if (range.from === "") return;
+  async function addCategory() {
+    if (!name.trim()) return;
     setBusy(true); setMsg("");
     try {
-      const from = Number(range.from);
-      const to = range.to === "" ? null : Number(range.to);
-      const name = `${rupee(from)} – ${to ? rupee(to) : "above"}`;
-      await post("/api/admin/slabs", { name, min_price: from, max_price: to, priority: from });
-      setRange({ from: "", to: "" });
-      reload();
+      await post("/api/admin/slabs", { name: name.trim(), min_price: 0, max_price: null, priority: 0 });
+      setName(""); reload();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
 
@@ -39,117 +34,101 @@ export default function QuickSetup() {
 
   const invByPrize = {};
   data.inventory.forEach((i) => { if (invByPrize[i.prize_id] === undefined) invByPrize[i.prize_id] = i; });
-  const ranges = data.slabs.filter((s) => s.is_active !== false).sort((a, b) => a.min_price - b.min_price);
+  const categories = data.slabs.filter((s) => s.is_active !== false).sort((a, b) => a.priority - b.priority);
 
   return (
     <div>
-      <h1 className="page-h">Gifts by price</h1>
+      <h1 className="page-h">Categories &amp; gifts</h1>
 
       <div className="card">
         <p className="muted" style={{ lineHeight: 1.6 }}>
-          Add a phone price range, then type gift names under it.<br />
-          <b>One gift</b> = everyone in that range wins it. <b>Many gifts</b> = one is picked at random.<br />
-          <b>Chance</b> is relative — a gift with 3 comes up 3× as often as one with 1.
-          <b> Per day</b> limits how many times a gift can be given each day (blank = no limit).
+          Add a category (Mobile, LED, Laptop…). Under each, add gifts with the
+          <b> percentage</b> chance of winning them. Percentages in a category should add up to 100.
         </p>
         <div className="row">
-          <input className="input sm" type="number" placeholder="From ₹" value={range.from}
-                 onChange={(e) => setRange({ ...range, from: e.target.value })} />
-          <span className="muted">to</span>
-          <input className="input sm" type="number" placeholder="To ₹ (blank = & above)" value={range.to}
-                 onChange={(e) => setRange({ ...range, to: e.target.value })} />
-          <button className="btn btn-gold" onClick={addRange} disabled={busy || range.from === ""}>Add price range</button>
+          <input className="input" placeholder="Category name (e.g. MOBILE)" value={name}
+                 onChange={(e) => setName(e.target.value)}
+                 onKeyDown={(e) => e.key === "Enter" && addCategory()} />
+          <button className="btn btn-gold" onClick={addCategory} disabled={busy || !name.trim()}>Add category</button>
         </div>
         {msg && <p className="adm-err">{msg}</p>}
       </div>
 
-      {ranges.map((s) => (
-        <RangeCard key={s.id} slab={s} rules={data.rules[s.id] || []}
-                   prizes={data.prizes} inv={invByPrize} onChange={reload} />
+      {categories.map((s) => (
+        <CategoryCard key={s.id} slab={s} rules={data.rules[s.id] || []}
+                      prizes={data.prizes} inv={invByPrize} onChange={reload} />
       ))}
-      {!ranges.length && <p className="muted">No price ranges yet — add one above.</p>}
+      {!categories.length && <p className="muted">No categories yet — add one above.</p>}
     </div>
   );
 }
 
-function RangeCard({ slab, rules, prizes, inv, onChange }) {
+function CategoryCard({ slab, rules, prizes, inv, onChange }) {
   const [name, setName] = useState("");
   const [image, setImage] = useState("");
-  const [perDay, setPerDay] = useState("");
+  const [pct, setPct] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const total = rules.reduce((s, r) => s + Number(r.weight), 0);
+
   async function addGift() {
-    if (!name.trim()) return;
+    if (!name.trim() || pct === "") return;
     setBusy(true); setMsg("");
     try {
       let prize = prizes.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
       if (!prize) prize = await post("/api/admin/prizes", {
-        name: name.trim(), value: 0, is_active: true,
-        image_url: image.trim() || null,
+        name: name.trim(), value: 0, is_active: true, image_url: image.trim() || null,
       });
       else if (image.trim()) await patch(`/api/admin/prizes/${prize.id}`, { image_url: image.trim() });
       if (rules.some((r) => r.prize_id === prize.id)) {
-        setMsg("That gift is already in this range."); setBusy(false); return;
+        setMsg("That gift is already in this category."); setBusy(false); return;
       }
       if (!inv[prize.id]) await post("/api/admin/inventory", { prize_id: prize.id, quantity_initial: UNLIMITED });
-      await post("/api/admin/rules", {
-        slab_id: slab.id, prize_id: prize.id, weight: 1,
-        daily_limit: perDay === "" ? null : Number(perDay),
-      });
-      setName(""); setImage(""); setPerDay("");
+      await post("/api/admin/rules", { slab_id: slab.id, prize_id: prize.id, weight: Number(pct) });
+      setName(""); setImage(""); setPct("");
       onChange();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function removeGift(ruleId) { await del(`/api/admin/rules/${ruleId}`); onChange(); }
+  async function setPercent(ruleId, val) {
+    await patch(`/api/admin/rules/${ruleId}`, { weight: Number(val) || 0 });
+    onChange();
+  }
   async function setPhoto(prizeId, prizeName) {
     const cur = (prizes.find((p) => p.id === prizeId) || {}).image_url || "";
-    const url = window.prompt(`Photo link for "${prizeName}" (paste an image URL, or leave blank to remove):`, cur);
+    const url = window.prompt(`Photo link for "${prizeName}" (paste an image URL, or blank to remove):`, cur);
     if (url === null) return;
     await patch(`/api/admin/prizes/${prizeId}`, { image_url: url.trim() || null });
     onChange();
   }
-  async function setWeight(ruleId, val) {
-    await patch(`/api/admin/rules/${ruleId}`, { weight: Number(val) || 1 });
-    onChange();
-  }
-  async function setDaily(ruleId, val) {
-    await patch(`/api/admin/rules/${ruleId}`, { daily_limit: val === "" ? null : Number(val) });
-    onChange();
-  }
-  async function removeRange() {
-    if (!window.confirm(`Remove the range "${slab.name}"?`)) return;
+  async function removeCategory() {
+    if (!window.confirm(`Remove the category "${slab.name}"?`)) return;
     await patch(`/api/admin/slabs/${slab.id}`, { is_active: false });
     onChange();
   }
 
-  const single = rules.length === 1;
-
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0 }}>{slab.name}</h3>
-        <button className="btn btn-ghost sm" onClick={removeRange}>Remove range</button>
+        <h3 style={{ margin: 0 }}>{slab.name}
+          <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}> &nbsp;(total {total}%)</span>
+        </h3>
+        <button className="btn btn-ghost sm" onClick={removeCategory}>Remove category</button>
       </div>
 
       <table className="table" style={{ marginTop: 10 }}>
-        <thead><tr><th>Gift</th><th>Chance</th><th>Per day</th><th></th></tr></thead>
+        <thead><tr><th>Gift</th><th>Percentage</th><th></th></tr></thead>
         <tbody>
           {rules.map((r) => (
             <tr key={r.id}>
               <td>{r.prize_name}</td>
               <td>
-                {single ? <span className="muted">Always</span> : (
-                  <span className="row" style={{ gap: 8 }}>
-                    <input className="input sm" type="number" defaultValue={r.weight}
-                           onBlur={(e) => { const v = e.target.value; if (v !== "" && String(r.weight) !== v) setWeight(r.id, v); }} />
-                    <span className="muted">{r.percentage}%</span>
-                  </span>
-                )}
-              </td>
-              <td>
-                <input className="input sm" type="number" placeholder="∞" defaultValue={r.daily_limit ?? ""}
-                       onBlur={(e) => { const v = e.target.value; if (String(r.daily_limit ?? "") !== v) setDaily(r.id, v); }} />
+                <span className="row" style={{ gap: 8 }}>
+                  <input className="input sm" type="number" defaultValue={r.weight}
+                         onBlur={(e) => { const v = e.target.value; if (v !== "" && String(r.weight) !== v) setPercent(r.id, v); }} />
+                  <span className="muted">%</span>
+                </span>
               </td>
               <td style={{ textAlign: "right" }}>
                 <button className="btn btn-ghost sm" onClick={() => setPhoto(r.prize_id, r.prize_name)}>Photo</button>
@@ -157,19 +136,18 @@ function RangeCard({ slab, rules, prizes, inv, onChange }) {
               </td>
             </tr>
           ))}
-          {!rules.length && <tr><td colSpan="4" className="muted">No gifts yet — add one below.</td></tr>}
+          {!rules.length && <tr><td colSpan="3" className="muted">No gifts yet — add one below.</td></tr>}
         </tbody>
       </table>
 
       <div className="row" style={{ marginTop: 10 }}>
-        <input className="input" placeholder="Gift name (e.g. Free Watch)" value={name}
-               onChange={(e) => setName(e.target.value)}
-               onKeyDown={(e) => e.key === "Enter" && addGift()} />
+        <input className="input" placeholder="Gift name (e.g. Ear Buds)" value={name}
+               onChange={(e) => setName(e.target.value)} />
         <input className="input" placeholder="Photo link (optional)" value={image}
                onChange={(e) => setImage(e.target.value)} />
-        <input className="input sm" type="number" placeholder="Per day (blank = ∞)" value={perDay}
-               onChange={(e) => setPerDay(e.target.value)} />
-        <button className="btn btn-gold" onClick={addGift} disabled={busy || !name.trim()}>Add gift</button>
+        <input className="input sm" type="number" placeholder="%" value={pct}
+               onChange={(e) => setPct(e.target.value)} />
+        <button className="btn btn-gold" onClick={addGift} disabled={busy || !name.trim() || pct === ""}>Add gift</button>
       </div>
       {msg && <p className="adm-err">{msg}</p>}
     </div>

@@ -20,11 +20,17 @@ export const createSession = (billId, tvCode) =>
 export const kioskSpin = (sessionId) =>
   post(`/api/sessions/${sessionId}/kiosk-spin`, {});
 
-export const registerPublic = (tvCode, customerName, billNumber, price) =>
+export const registerPublic = (tvCode, customerName, billNumber, categoryId) =>
   post("/api/public/register", {
     tv_code: tvCode, customer_name: customerName,
-    bill_number: billNumber, price: Number(price),
+    bill_number: billNumber, category_id: categoryId,
   });
+
+export async function getCategories(tvCode) {
+  const res = await fetch(API_URL + `/api/tv/${encodeURIComponent(tvCode)}/categories`);
+  if (!res.ok) throw new Error("Couldn't load categories");
+  return res.json();
+}
 
 export async function getTvState(tvCode) {
   const res = await fetch(API_URL + `/api/tv/${encodeURIComponent(tvCode)}/state`);
