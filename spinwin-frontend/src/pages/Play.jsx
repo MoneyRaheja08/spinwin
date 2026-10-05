@@ -28,8 +28,8 @@ export default function Play() {
     setStep("spinning");
     try {
       const res = await kioskSpin(sessionRef.current);
-      // give the TV time to run its countdown + wheel, then reveal on phone
-      setTimeout(() => { setResult(res); setStep("result"); sound.win(); }, 6500);
+      // give the TV time to run its 8s wheel, then reveal on phone
+      setTimeout(() => { setResult(res); setStep("result"); sound.win(); }, 8500);
     } catch (e) { setMsg(e.message); setStep("error"); }
   }
 

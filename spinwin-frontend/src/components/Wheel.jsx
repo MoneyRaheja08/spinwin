@@ -14,7 +14,7 @@ function segmentPath(cx, cy, r, a0, a1) {
   return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${largeArc} 1 ${x1} ${y1} Z`;
 }
 
-export default function Wheel({ segments, rotation, duration, spinning }) {
+export default function Wheel({ segments, rotation, duration, spinning, easing }) {
   const size = 620;
   const cx = size / 2;
   const cy = size / 2;
@@ -55,7 +55,7 @@ export default function Wheel({ segments, rotation, duration, spinning }) {
         className="wheel-spinner"
         style={{
           transform: `rotate(${rotation}deg)`,
-          transition: spinning ? `transform ${duration}s cubic-bezier(0.16, 0.84, 0.30, 1)` : "none",
+          transition: spinning ? `transform ${duration}s ${easing || "cubic-bezier(0.16, 0.84, 0.30, 1)"}` : "none",
         }}
       >
         <svg viewBox={`0 0 ${size} ${size}`} className="wheel-svg">
@@ -93,4 +93,16 @@ export function targetRotation(index, count, spins = 6) {
   const seg = 360 / Math.max(count, 1);
   const center = index * seg + seg / 2;
   return spins * 360 - center;
+}
+
+// Two-phase plan: spin clockwise to p1, then anticlockwise to p2 which lands
+// the winning segment under the pointer. Used for the 4s + 4s dramatic spin.
+export function spinPlan(index, count, cur) {
+  const seg = 360 / Math.max(count, 1);
+  const center = index * seg + seg / 2;
+  const winnerAngle = ((-center % 360) + 360) % 360;
+  const p1 = cur + 4 * 360 + 200;                 // clockwise burst
+  const back = (((p1 - winnerAngle) % 360) + 360) % 360 + 360; // 360–720 backwards
+  const p2 = p1 - back;                            // anticlockwise, lands on winner
+  return { p1, p2 };
 }

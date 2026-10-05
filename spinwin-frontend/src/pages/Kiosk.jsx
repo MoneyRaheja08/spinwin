@@ -3,10 +3,13 @@ import confetti from "canvas-confetti";
 import { checkEligibility, createSession, kioskSpin } from "../api";
 import { branding } from "../branding";
 import * as sound from "../sound";
-import Wheel, { targetRotation } from "../components/Wheel";
+import Wheel, { spinPlan } from "../components/Wheel";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv") || "TV-001";
-const SPIN_SECONDS = 5;
+const PHASE = 4;                  // seconds per phase
+const SPIN_SECONDS = PHASE * 2;   // 4s clockwise + 4s anticlockwise
+const EASE_IN = "cubic-bezier(0.45, 0, 0.9, 0.6)";   // accelerate
+const EASE_OUT = "cubic-bezier(0.1, 0.7, 0.2, 1)";    // decelerate to stop
 const PLACEHOLDER = [
   { name: "\u20B9100" }, { name: "\u20B9500" }, { name: "Earphones" },
   { name: "Smartwatch" }, { name: "Cover" }, { name: "\u20B92000" },
@@ -29,6 +32,7 @@ export default function Kiosk() {
   const [wheel, setWheel] = useState([]);
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
+  const [easing, setEasing] = useState(EASE_OUT);
   const [result, setResult] = useState(null);
   const [customerName, setCustomerName] = useState(null);
   const [countdown, setCountdown] = useState(null);
@@ -82,9 +86,12 @@ export default function Kiosk() {
       let idx = w.findIndex((x) => x.prize_id === res.prize_id);
       if (idx < 0) idx = 0;
       runCountdown();
-      const base = rotRef.current - (rotRef.current % 360);
-      const target = base + targetRotation(idx, w.length, 6);
-      requestAnimationFrame(() => { setSpinning(true); setRotation(target); rotRef.current = target; });
+      const { p1, p2 } = spinPlan(idx, w.length, rotRef.current);
+      // phase 1: clockwise
+      setEasing(EASE_IN);
+      requestAnimationFrame(() => { setSpinning(true); setRotation(p1); rotRef.current = p1; });
+      // phase 2: anticlockwise, lands on the winner
+      setTimeout(() => { setEasing(EASE_OUT); setRotation(p2); rotRef.current = p2; }, PHASE * 1000);
       setTimeout(() => { setResult(res); setPhase("result"); fire(); sound.win(); }, SPIN_SECONDS * 1000);
     } catch (err) {
       setMsg(err.message); setPhase("error");
@@ -125,7 +132,7 @@ export default function Kiosk() {
       <main className="tv-stage">
         <section className="tv-wheel">
           <Wheel segments={displayWheel(wheel)} rotation={rotation}
-                 duration={SPIN_SECONDS} spinning={spinning} />
+                 duration={PHASE} spinning={spinning} easing={easing} />
           {countdown !== null && <div className="countdown">{countdown}</div>}
         </section>
 

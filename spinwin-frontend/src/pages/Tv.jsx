@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import confetti from "canvas-confetti";
 import { getTvState } from "../api";
 import { branding } from "../branding";
 import * as sound from "../sound";
-import Wheel, { targetRotation } from "../components/Wheel";
+import Wheel, { spinPlan } from "../components/Wheel";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv") || "TV-001";
-const SPIN_SECONDS = 5;
+const PHASE = 4;
+const SPIN_SECONDS = PHASE * 2;
+const EASE_IN = "cubic-bezier(0.45, 0, 0.9, 0.6)";
+const EASE_OUT = "cubic-bezier(0.1, 0.7, 0.2, 1)";
 const PLACEHOLDER = [
   { name: "₹100" }, { name: "₹500" }, { name: "Earphones" },
   { name: "Smartwatch" }, { name: "Cover" }, { name: "₹2000" },
@@ -28,6 +30,7 @@ export default function Tv() {
   const [customerName, setCustomerName] = useState(null);
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
+  const [easing, setEasing] = useState(EASE_OUT);
   const [result, setResult] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [muted, setMuted] = useState(true);
@@ -90,9 +93,10 @@ export default function Tv() {
         runCountdown();
         let idx = w.findIndex((x) => x.prize_id === s.result.prize_id);
         if (idx < 0) idx = 0;
-        const base = rotRef.current - (rotRef.current % 360);
-        const target = base + targetRotation(idx, w.length, 6);
-        requestAnimationFrame(() => { setSpinning(true); setRotation(target); rotRef.current = target; });
+        const { p1, p2 } = spinPlan(idx, w.length, rotRef.current);
+        setEasing(EASE_IN);
+        requestAnimationFrame(() => { setSpinning(true); setRotation(p1); rotRef.current = p1; });
+        setTimeout(() => { setEasing(EASE_OUT); setRotation(p2); rotRef.current = p2; }, PHASE * 1000);
         setTimeout(() => {
           setResult(s.result); setPhase("result"); fire(); sound.win();
         }, SPIN_SECONDS * 1000);
@@ -142,7 +146,7 @@ export default function Tv() {
       <main className="tv-stage">
         <section className="tv-wheel">
           <Wheel segments={displayWheel(wheel)} rotation={rotation}
-                 duration={SPIN_SECONDS} spinning={spinning} />
+                 duration={PHASE} spinning={spinning} easing={easing} />
           {countdown !== null && <div className="countdown">{countdown}</div>}
         </section>
 
@@ -152,7 +156,11 @@ export default function Tv() {
               <p className="panel-kicker">Just bought a phone?</p>
               <h2 className="panel-h">Scan to play</h2>
               <div className="qr-box">
-                <QRCodeSVG value={playUrl} size={220} bgColor="#ffffff" fgColor="#120a2e" includeMargin />
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=440x440&margin=10&data=${encodeURIComponent(playUrl)}`}
+                  width="220" height="220" alt="Scan to play"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
               </div>
               <p className="panel-sub">Point your camera at the code</p>
             </div>
