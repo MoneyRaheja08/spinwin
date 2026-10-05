@@ -45,8 +45,8 @@ function clapBurst(at, gain = 0.3) {
   src.start(at);
 }
 
-// Applause: many overlapping claps for ~2.5 seconds.
-export function applause() {
+// Fallback applause made from synthesized claps (used if the mp3 won't play).
+function synthApplause() {
   if (!ctx || muted) return;
   const now = ctx.currentTime;
   for (let i = 0; i < 26; i++) {
@@ -55,8 +55,32 @@ export function applause() {
   }
 }
 
+// Real applause recording (public/applause.mp3), played for `seconds` then
+// faded out. Falls back to the synth version if the file can't play.
+let applauseEl = null;
+export function applause(seconds = 5) {
+  if (muted) return;
+  try {
+    const a = new Audio("/applause.mp3");
+    a.volume = 0.9;
+    applauseEl = a;
+    const p = a.play();
+    if (p && p.catch) p.catch(() => synthApplause());
+    const fadeStart = Math.max(0, seconds - 0.6) * 1000;
+    setTimeout(() => {
+      const step = setInterval(() => {
+        if (!a) return clearInterval(step);
+        a.volume = Math.max(0, a.volume - 0.12);
+        if (a.volume <= 0.02) { try { a.pause(); } catch {} clearInterval(step); }
+      }, 70);
+    }, fadeStart);
+  } catch {
+    synthApplause();
+  }
+}
+
 export function win() {
   [523, 659, 784, 1047].forEach((f, i) =>
     setTimeout(() => beep(f, 0.35, "sine", 0.07), i * 120));
-  applause();
+  applause(5);
 }
