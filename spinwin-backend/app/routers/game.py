@@ -13,7 +13,7 @@ from ..db import get_db
 from ..engine import SpinError, award_spin, resolve_slab
 from ..models import (
     AuditLog, Bill, BillItem, BillSpinStatus, Customer, Prize, SessionStatus,
-    SpinSession, Store, TvDevice, User, UserRole,
+    SpinResult, SpinSession, Store, TvDevice, User, UserRole,
 )
 from ..realtime import _wheel_for_slab, sio
 from ..security import get_current_user, require_roles
@@ -268,6 +268,128 @@ async def kiosk_spin(session_id: str, db: AsyncSession = Depends(get_db)):
         return await award_spin(session_id)
     except SpinError as exc:
         raise HTTPException(400, str(exc))
+
+
+# ========================================================================
+#  Phone -> TV flow WITHOUT websockets: the phone registers + spins over
+#  plain REST, and the TV polls /api/tv/{code}/state a few times a second.
+#  Reliable on a single Render instance, no Redis needed.
+# ========================================================================
+
+class PublicRegisterIn(BaseModel):
+    tv_code: str
+    customer_name: str
+    bill_number: str
+    price: float
+
+
+@router.post("/public/register")
+async def public_register(body: PublicRegisterIn, db: AsyncSession = Depends(get_db)):
+    """Customer self-registers from their phone (scanned the TV QR). Creates
+    the customer + bill + session and attaches it to the TV so the TV screen
+    shows the wheel. No login required."""
+    tv = (await db.execute(
+        select(TvDevice).where(TvDevice.code == body.tv_code)
+    )).scalar_one_or_none()
+    if not tv or not tv.is_active:
+        raise HTTPException(404, "Unknown or inactive TV")
+    if not body.customer_name.strip() or not body.bill_number.strip():
+        raise HTTPException(400, "Name and bill number are required")
+
+    dup = (await db.execute(select(Bill).where(
+        Bill.store_id == tv.store_id, Bill.bill_number == body.bill_number.strip()
+    ))).scalar_one_or_none()
+    if dup:
+        raise HTTPException(400, "This bill number has already been used")
+
+    slab = await resolve_slab(db, body.price, tv.store_id)
+    if not slab:
+        raise HTTPException(400, "No prize range is set for this price yet")
+
+    cust = Customer(name=body.customer_name.strip(),
+                    mobile=f"NA-{body.bill_number.strip()}-{secrets.token_hex(2)}")
+    db.add(cust)
+    await db.flush()
+
+    bill = Bill(store_id=tv.store_id, bill_number=body.bill_number.strip(),
+                customer_id=cust.id, total_amount=body.price, spin_eligible=True,
+                spins_allowed=1, spins_used=0, spin_status=BillSpinStatus.NOT_PLAYED)
+    db.add(bill)
+    await db.flush()
+    item = BillItem(bill_id=bill.id, selling_price=body.price, is_spin_item=True)
+    db.add(item)
+    await db.flush()
+
+    code = "SPN-" + secrets.token_urlsafe(9)
+    sess = SpinSession(
+        store_id=tv.store_id, bill_id=bill.id, bill_item_id=item.id,
+        customer_id=cust.id, price_slab_id=slab.id, qualifying_price=body.price,
+        pairing_code=code, status=SessionStatus.CONNECTED,
+        tv_device_id=tv.id, connected_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.SESSION_TTL_MIN),
+    )
+    db.add(sess)
+    await db.flush()
+    tv.active_session_id = sess.id
+    db.add(AuditLog(actor_role="CUSTOMER", action="BILL_CREATE", entity_type="bill",
+                    entity_id=bill.id, store_id=tv.store_id,
+                    meta_data={"bill_number": bill.bill_number, "price": body.price,
+                               "via": "phone"}))
+    await db.commit()
+
+    wheel = await _wheel_for_slab(db, slab.id)
+    return {"session_id": str(sess.id), "customer_name": cust.name,
+            "slab": slab.name, "wheel": wheel}
+
+
+@router.get("/tv/{tv_code}/state")
+async def tv_state(tv_code: str, db: AsyncSession = Depends(get_db)):
+    """The TV screen polls this. Tells it whether a customer is connected,
+    the wheel to show, and (once spun) the winning prize to animate to."""
+    tv = (await db.execute(
+        select(TvDevice).where(TvDevice.code == tv_code)
+    )).scalar_one_or_none()
+    if not tv:
+        raise HTTPException(404, "Unknown TV")
+    if not tv.active_session_id:
+        return {"status": "idle"}
+
+    sess = (await db.execute(
+        select(SpinSession).where(SpinSession.id == tv.active_session_id)
+    )).scalar_one_or_none()
+    if not sess:
+        tv.active_session_id = None
+        await db.commit()
+        return {"status": "idle"}
+
+    cname = None
+    if sess.customer_id:
+        cname = (await db.execute(
+            select(Customer.name).where(Customer.id == sess.customer_id)
+        )).scalar_one_or_none()
+    wheel = await _wheel_for_slab(db, sess.price_slab_id) if sess.price_slab_id else []
+
+    if sess.status == SessionStatus.COMPLETED:
+        # auto-return to idle ~30s after the win so the TV shows the QR again
+        if sess.completed_at:
+            age = (datetime.now(timezone.utc) - sess.completed_at).total_seconds()
+            if age > 30:
+                tv.active_session_id = None
+                await db.commit()
+                return {"status": "idle"}
+        res = (await db.execute(
+            select(SpinResult).where(SpinResult.session_id == sess.id)
+        )).scalar_one_or_none()
+        result = None
+        if res:
+            result = {"prize_id": str(res.prize_id) if res.prize_id else None,
+                      "prize_name": res.prize_name, "prize_value": float(res.prize_value)}
+        return {"status": "done", "session_id": str(sess.id), "customer_name": cname,
+                "wheel": wheel, "result": result,
+                "spun_at": sess.completed_at.isoformat() if sess.completed_at else None}
+
+    return {"status": "ready", "session_id": str(sess.id),
+            "customer_name": cname, "wheel": wheel}
 
 
 @router.get("/my/tv-devices")

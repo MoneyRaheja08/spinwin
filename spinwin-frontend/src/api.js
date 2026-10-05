@@ -19,3 +19,15 @@ export const createSession = (billId, tvCode) =>
 
 export const kioskSpin = (sessionId) =>
   post(`/api/sessions/${sessionId}/kiosk-spin`, {});
+
+export const registerPublic = (tvCode, customerName, billNumber, price) =>
+  post("/api/public/register", {
+    tv_code: tvCode, customer_name: customerName,
+    bill_number: billNumber, price: Number(price),
+  });
+
+export async function getTvState(tvCode) {
+  const res = await fetch(API_URL + `/api/tv/${encodeURIComponent(tvCode)}/state`);
+  if (!res.ok) throw new Error("TV not reachable");
+  return res.json();
+}
