@@ -370,7 +370,10 @@ async def list_tv(db: AsyncSession = Depends(get_db), user=Depends(admin)):
 async def create_tv(body: TvIn, db: AsyncSession = Depends(get_db), user=Depends(admin)):
     store_id = uid(body.store_id) if body.store_id else user.store_id
     if store_id is None:
-        raise HTTPException(400, "store_id required")
+        # super admin with no store picked: default to the first store
+        store_id = (await db.execute(select(Store.id).order_by(Store.created_at).limit(1))).scalar_one_or_none()
+    if store_id is None:
+        raise HTTPException(400, "No store exists yet — create a store first")
     tv = TvDevice(code=body.code, name=body.name, store_id=store_id,
                   is_active=body.is_active, pairing_code="PAIR-" + secrets.token_hex(3).upper())
     db.add(tv)
