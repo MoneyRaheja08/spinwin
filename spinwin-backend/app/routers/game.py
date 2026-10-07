@@ -300,6 +300,17 @@ async def kiosk_spin(session_id: str, db: AsyncSession = Depends(get_db)):
 #  Reliable on a single Render instance, no Redis needed.
 # ========================================================================
 
+@router.get("/tv/{tv_code}/gifts")
+async def tv_gifts(tv_code: str, db: AsyncSession = Depends(get_db)):
+    """All gifts for this TV's store — so the idle wheel shows real prizes."""
+    tv = (await db.execute(
+        select(TvDevice).where(TvDevice.code == tv_code)
+    )).scalar_one_or_none()
+    if not tv:
+        raise HTTPException(404, "Unknown TV")
+    return await _all_gifts_wheel(db, tv.store_id)
+
+
 @router.get("/tv/{tv_code}/categories")
 async def tv_categories(tv_code: str, db: AsyncSession = Depends(get_db)):
     """Categories the customer can pick from (active pools for this TV's store)."""

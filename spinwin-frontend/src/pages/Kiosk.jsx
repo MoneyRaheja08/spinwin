@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { getCategories, registerPublic, kioskSpin } from "../api";
+import { getCategories, getGifts, registerPublic, kioskSpin } from "../api";
 import { branding } from "../branding";
 import * as sound from "../sound";
 import Wheel, { spinPlan } from "../components/Wheel";
@@ -38,11 +38,15 @@ export default function Kiosk() {
   const sessionRef = useRef(null);
   const rotRef = useRef(0);
 
-  useEffect(() => { getCategories(TV_CODE).then(setCats).catch(() => {}); }, []);
+  const giftsRef = useRef([]);
+  useEffect(() => {
+    getCategories(TV_CODE).then(setCats).catch(() => {});
+    getGifts(TV_CODE).then((g) => { giftsRef.current = g || []; setWheel(g || []); }).catch(() => {});
+  }, []);
 
   function reset() {
     sessionRef.current = null;
-    setPhase("enter"); setBill(""); setWheel([]); setResult(null);
+    setPhase("enter"); setBill(""); setWheel(giftsRef.current); setResult(null);
     setRotation(0); rotRef.current = 0; setSpinning(false); setMsg("");
   }
 

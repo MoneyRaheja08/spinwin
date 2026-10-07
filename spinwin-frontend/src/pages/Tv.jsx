@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { getTvState } from "../api";
+import { getTvState, getGifts } from "../api";
 import { branding } from "../branding";
 import * as sound from "../sound";
 import Wheel, { spinPlan } from "../components/Wheel";
@@ -42,6 +42,13 @@ export default function Tv() {
   const playUrl = `${location.origin}/play?tv=${encodeURIComponent(TV_CODE)}`;
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // show the real gifts on the idle wheel (before anyone scans)
+  useEffect(() => {
+    getGifts(TV_CODE).then((g) => {
+      if (g && g.length && phaseRef.current === "idle") setWheel(g);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let alive = true;

@@ -26,6 +26,12 @@ export const registerPublic = (tvCode, customerName, billNumber, categoryId) =>
     bill_number: billNumber, category_id: categoryId,
   });
 
+export async function getGifts(tvCode) {
+  const res = await fetch(API_URL + `/api/tv/${encodeURIComponent(tvCode)}/gifts`);
+  if (!res.ok) throw new Error("Couldn't load gifts");
+  return res.json();
+}
+
 export async function getCategories(tvCode) {
   const res = await fetch(API_URL + `/api/tv/${encodeURIComponent(tvCode)}/categories`);
   if (!res.ok) throw new Error("Couldn't load categories");
