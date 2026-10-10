@@ -23,9 +23,9 @@ export default function Wheel({ segments, rotation, duration, spinning, easing }
   const n = Math.max(segments.length, 1);
   const seg = 360 / n;
 
-  // font size that keeps even long names inside their slice
-  const baseFs = n <= 6 ? 23 : n <= 8 ? 19 : n <= 10 ? 16 : n <= 12 ? 14 : 12;
-  const usableLen = r * 0.60; // from ~0.33r to ~0.93r along the spoke
+  // font size that keeps even long names inside their slice, but stays big
+  const baseFs = n <= 6 ? 27 : n <= 8 ? 24 : n <= 10 ? 21 : n <= 14 ? 19 : 17;
+  const usableLen = r * 0.72; // longer label run (from ~0.26r out to ~0.98r)
 
   const slices = useMemo(() => {
     return segments.map((s, i) => {
@@ -37,13 +37,13 @@ export default function Wheel({ segments, rotation, duration, spinning, easing }
       const rightHalf = dx >= 0;
       let rot = (Math.atan2(dy, dx) * 180) / Math.PI;
       if (!rightHalf) rot += 180;
-      const ri = r * 0.33;
+      const ri = r * 0.26;
       const [tx, ty] = pointAt(cx, cy, ri, mid);
       const raw = (s.name || "").toUpperCase();
-      const name = raw.length > 20 ? raw.slice(0, 19) + "…" : raw;
-      // shrink font further if the name is long
-      const fitFs = Math.floor(usableLen / (0.58 * Math.max(name.length, 1)));
-      const fs = Math.max(11, Math.min(baseFs, fitFs));
+      const name = raw.length > 22 ? raw.slice(0, 21) + "…" : raw;
+      // shrink font only if the name is genuinely long
+      const fitFs = Math.floor(usableLen / (0.55 * Math.max(name.length, 1)));
+      const fs = Math.max(14, Math.min(baseFs, fitFs));
       return { s, i, a0, a1, mid, tx, ty, rot, anchor: rightHalf ? "start" : "end",
                name, fs, color: colors[i % colors.length] };
     });
