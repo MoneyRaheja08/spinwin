@@ -160,7 +160,7 @@ export default function Tv() {
         <aside className="tv-panel">
           {phase === "idle" && (
             <div className="panel-card">
-              <p className="panel-kicker">Just bought a phone?</p>
+              <p className="panel-kicker">Just bought a product?</p>
               <h2 className="panel-h">Scan to play</h2>
               <div className="qr-box">
                 <img

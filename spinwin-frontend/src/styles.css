@@ -75,8 +75,10 @@ body {
   filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
 }
 .wheel-label {
-  font-family: var(--display); font-weight: 700;
-  font-size: 20px; fill: #10061f;
+  font-family: var(--display); font-weight: 800;
+  font-size: 20px; fill: #ffffff;
+  stroke: #10061f; stroke-width: 3px; paint-order: stroke fill;
+  stroke-linejoin: round;
 }
 .wheel-hub {
   font-family: var(--display); font-weight: 800; font-size: 46px; fill: var(--gold);

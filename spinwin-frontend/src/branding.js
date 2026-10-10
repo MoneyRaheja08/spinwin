@@ -3,7 +3,7 @@
 export const branding = {
   companyName: "Ashoka Enterprises",
   gameTitle: "SPIN & WIN",
-  tagline: "Buy a phone. Spin the wheel. Win instantly.",
+  tagline: "Buy a product. Spin the wheel. Win instantly.",
   currency: "\u20B9",
   logoUrl: null, // e.g. "/logo.png"
   // festive jewel tones used for the wheel segments
