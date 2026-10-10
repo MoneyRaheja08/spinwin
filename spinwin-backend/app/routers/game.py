@@ -21,25 +21,15 @@ from ..security import get_current_user, require_roles
 
 
 async def _all_gifts_wheel(db, store_id):
-    """Every gift across all active price ranges for this store — used to make
-    the wheel look full. The customer still only WINS from their own range."""
+    """EVERY active gift — shown on the wheel so it looks full and exciting.
+    Display-only gifts (no category rule) can appear here but can never be won;
+    the customer still only WINS from their chosen category's percentages."""
     rows = (await db.execute(
-        select(Prize)
-        .join(PrizeRule, PrizeRule.prize_id == Prize.id)
-        .join(PriceSlab, PriceSlab.id == PrizeRule.slab_id)
-        .where(PrizeRule.is_active.is_(True), Prize.is_active.is_(True),
-               PriceSlab.is_active.is_(True),
-               (PriceSlab.store_id == store_id) | (PriceSlab.store_id.is_(None)))
-        .order_by(Prize.priority)
+        select(Prize).where(Prize.is_active.is_(True))
+        .order_by(Prize.priority, Prize.value)
     )).scalars().all()
-    seen, out = set(), []
-    for p in rows:
-        if p.id in seen:
-            continue
-        seen.add(p.id)
-        out.append({"prize_id": str(p.id), "name": p.name,
-                    "value": float(p.value), "image_url": p.image_url})
-    return out
+    return [{"prize_id": str(p.id), "name": p.name,
+             "value": float(p.value), "image_url": p.image_url} for p in rows]
 
 router = APIRouter(prefix="/api", tags=["game"])
 
