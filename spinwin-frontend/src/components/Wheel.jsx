@@ -39,7 +39,8 @@ export default function Wheel({ segments, rotation, duration, spinning, easing }
       if (!rightHalf) rot += 180;
       const ri = r * 0.33;
       const [tx, ty] = pointAt(cx, cy, ri, mid);
-      const name = (s.name || "").length > 20 ? s.name.slice(0, 19) + "…" : (s.name || "");
+      const raw = (s.name || "").toUpperCase();
+      const name = raw.length > 20 ? raw.slice(0, 19) + "…" : raw;
       // shrink font further if the name is long
       const fitFs = Math.floor(usableLen / (0.58 * Math.max(name.length, 1)));
       const fs = Math.max(11, Math.min(baseFs, fitFs));
