@@ -43,7 +43,9 @@ export default function QuickSetup() {
       <div className="card">
         <p className="muted" style={{ lineHeight: 1.6 }}>
           Add a category (Mobile, LED, Laptop…). Under each, add gifts with the
-          <b> percentage</b> chance of winning them. Percentages in a category should add up to 100.
+          <b> percentage</b> chance of winning them (should add up to 100).
+          <b> Per day</b> optionally limits how many of a gift can be given each day —
+          once it hits that number it stops for the day and resets at midnight. Blank = no limit.
         </p>
         <div className="row">
           <input className="input" placeholder="Category name (e.g. MOBILE)" value={name}
@@ -67,10 +69,39 @@ function CategoryCard({ slab, rules, prizes, inv, onChange }) {
   const [name, setName] = useState("");
   const [image, setImage] = useState("");
   const [pct, setPct] = useState("");
+  const [perDay, setPerDay] = useState("");
+  const [dailyTotal, setDailyTotal] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   const total = rules.reduce((s, r) => s + Number(r.weight), 0);
+
+  // Turn the percentages into per-day counts out of `dailyTotal`.
+  // The cheapest gift is left uncapped so there's always something to give
+  // once the day's quotas are used up.
+  async function applyDailyCounts() {
+    const N = Number(dailyTotal);
+    if (!N || N <= 0 || !rules.length) return;
+    setBusy(true); setMsg("");
+    try {
+      const sum = rules.reduce((s, r) => s + Number(r.weight), 0) || 1;
+      let cheapestId = rules[0].id, cheapestVal = Infinity;
+      rules.forEach((r) => {
+        const p = prizes.find((x) => x.id === r.prize_id);
+        const v = p ? Number(p.value) : 0;
+        if (v < cheapestVal) { cheapestVal = v; cheapestId = r.id; }
+      });
+      for (const r of rules) {
+        const cap = r.id === cheapestId
+          ? null
+          : Math.max(0, Math.round((Number(r.weight) / sum) * N));
+        await patch(`/api/admin/rules/${r.id}`, { daily_limit: cap });
+      }
+      setDailyTotal("");
+      setMsg("Daily counts set from the percentages.");
+      onChange();
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  }
 
   async function addGift() {
     if (!name.trim() || pct === "") return;
@@ -85,14 +116,21 @@ function CategoryCard({ slab, rules, prizes, inv, onChange }) {
         setMsg("That gift is already in this category."); setBusy(false); return;
       }
       if (!inv[prize.id]) await post("/api/admin/inventory", { prize_id: prize.id, quantity_initial: UNLIMITED });
-      await post("/api/admin/rules", { slab_id: slab.id, prize_id: prize.id, weight: Number(pct) });
-      setName(""); setImage(""); setPct("");
+      await post("/api/admin/rules", {
+        slab_id: slab.id, prize_id: prize.id, weight: Number(pct),
+        daily_limit: perDay === "" ? null : Number(perDay),
+      });
+      setName(""); setImage(""); setPct(""); setPerDay("");
       onChange();
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
   async function removeGift(ruleId) { await del(`/api/admin/rules/${ruleId}`); onChange(); }
   async function setPercent(ruleId, val) {
     await patch(`/api/admin/rules/${ruleId}`, { weight: Number(val) || 0 });
+    onChange();
+  }
+  async function setDaily(ruleId, val) {
+    await patch(`/api/admin/rules/${ruleId}`, { daily_limit: val === "" ? null : Number(val) });
     onChange();
   }
   async function setPhoto(prizeId, prizeName) {
@@ -117,8 +155,16 @@ function CategoryCard({ slab, rules, prizes, inv, onChange }) {
         <button className="btn btn-ghost sm" onClick={removeCategory}>Remove category</button>
       </div>
 
+      <div className="row" style={{ marginTop: 10, gap: 8 }}>
+        <span className="muted">Gifts per day for this category:</span>
+        <input className="input sm" type="number" placeholder="e.g. 100" value={dailyTotal}
+               onChange={(e) => setDailyTotal(e.target.value)} />
+        <button className="btn btn-ghost sm" onClick={applyDailyCounts}
+                disabled={busy || dailyTotal === ""}>Set daily counts from %</button>
+      </div>
+
       <table className="table" style={{ marginTop: 10 }}>
-        <thead><tr><th>Gift</th><th>Percentage</th><th></th></tr></thead>
+        <thead><tr><th>Gift</th><th>Percentage</th><th>Per day</th><th></th></tr></thead>
         <tbody>
           {rules.map((r) => (
             <tr key={r.id}>
@@ -130,13 +176,17 @@ function CategoryCard({ slab, rules, prizes, inv, onChange }) {
                   <span className="muted">%</span>
                 </span>
               </td>
+              <td>
+                <input className="input sm" type="number" placeholder="∞" defaultValue={r.daily_limit ?? ""}
+                       onBlur={(e) => { const v = e.target.value; if (String(r.daily_limit ?? "") !== v) setDaily(r.id, v); }} />
+              </td>
               <td style={{ textAlign: "right" }}>
                 <button className="btn btn-ghost sm" onClick={() => setPhoto(r.prize_id, r.prize_name)}>Photo</button>
                 <button className="btn btn-ghost sm" onClick={() => removeGift(r.id)}>Remove</button>
               </td>
             </tr>
           ))}
-          {!rules.length && <tr><td colSpan="3" className="muted">No gifts yet — add one below.</td></tr>}
+          {!rules.length && <tr><td colSpan="4" className="muted">No gifts yet — add one below.</td></tr>}
         </tbody>
       </table>
 
@@ -147,9 +197,11 @@ function CategoryCard({ slab, rules, prizes, inv, onChange }) {
                onChange={(e) => setImage(e.target.value)} />
         <input className="input sm" type="number" placeholder="%" value={pct}
                onChange={(e) => setPct(e.target.value)} />
+        <input className="input sm" type="number" placeholder="Per day (blank = ∞)" value={perDay}
+               onChange={(e) => setPerDay(e.target.value)} />
         <button className="btn btn-gold" onClick={addGift} disabled={busy || !name.trim() || pct === ""}>Add gift</button>
       </div>
-      {msg && <p className="adm-err">{msg}</p>}
+      {msg && <p className={msg.startsWith("Daily") ? "adm-ok" : "adm-err"}>{msg}</p>}
     </div>
   );
 }
