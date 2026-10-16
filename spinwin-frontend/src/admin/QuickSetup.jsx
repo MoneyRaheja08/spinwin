@@ -60,11 +60,13 @@ export default function QuickSetup() {
         </p>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           {stockGifts.map((p) => (
-            <button key={p.id}
-                    className={`btn sm ${p.is_active ? "btn-ghost" : "btn-gold"}`}
+            <button key={p.id} className="btn sm"
+                    style={p.is_active
+                      ? { background: "rgba(47,191,113,0.18)", color: "#8ff0b5", border: "1px solid #2fbf71" }
+                      : { background: "rgba(229,57,53,0.18)", color: "#ff9b98", border: "1px solid #e53935" }}
                     onClick={() => toggleStock(p.id, !p.is_active)}
-                    title={p.is_active ? "Click to mark out of stock" : "Click to mark back in stock"}>
-              {p.is_active ? `${p.name} — in stock` : `${p.name} — OUT (tap to restore)`}
+                    title={p.is_active ? "In stock — tap to mark OUT" : "Out of stock — tap to restore"}>
+              {p.is_active ? `✓ ${p.name} — in stock` : `✕ ${p.name} — OUT (tap to restore)`}
             </button>
           ))}
           {!stockGifts.length && <span className="muted">Add gifts to a category first.</span>}
