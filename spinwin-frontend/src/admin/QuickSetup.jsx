@@ -29,6 +29,11 @@ export default function QuickSetup() {
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
 
+  async function toggleStock(prizeId, makeActive) {
+    try { await patch(`/api/admin/prizes/${prizeId}`, { is_active: makeActive }); reload(); }
+    catch (e) { setMsg(e.message); }
+  }
+
   if (loading) return <p className="muted">Loading…</p>;
   if (error) return <p className="adm-err">{error}</p>;
 
@@ -36,9 +41,36 @@ export default function QuickSetup() {
   data.inventory.forEach((i) => { if (invByPrize[i.prize_id] === undefined) invByPrize[i.prize_id] = i; });
   const categories = data.slabs.filter((s) => s.is_active !== false).sort((a, b) => a.priority - b.priority);
 
+  // gifts that are used in at least one category (the winnable ones)
+  const usedIds = new Set();
+  Object.values(data.rules).forEach((rs) => rs.forEach((r) => usedIds.add(r.prize_id)));
+  const stockGifts = data.prizes
+    .filter((p) => usedIds.has(p.id))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
   return (
     <div>
       <h1 className="page-h">Categories &amp; gifts</h1>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Out of stock</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Turn a gift <b>off</b> when it runs out — it stops being won and leaves the wheel in every
+          category. Turn it back <b>on</b> when restocked; its percentages are kept.
+        </p>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          {stockGifts.map((p) => (
+            <button key={p.id}
+                    className={`btn sm ${p.is_active ? "btn-ghost" : "btn-gold"}`}
+                    onClick={() => toggleStock(p.id, !p.is_active)}
+                    title={p.is_active ? "Click to mark out of stock" : "Click to mark back in stock"}>
+              {p.is_active ? `${p.name} — in stock` : `${p.name} — OUT (tap to restore)`}
+            </button>
+          ))}
+          {!stockGifts.length && <span className="muted">Add gifts to a category first.</span>}
+        </div>
+        {msg && <p className="adm-err">{msg}</p>}
+      </div>
 
       <div className="card">
         <p className="muted" style={{ lineHeight: 1.6 }}>
