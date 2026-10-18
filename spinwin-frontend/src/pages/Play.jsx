@@ -4,6 +4,7 @@ import { branding } from "../branding";
 import * as sound from "../sound";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv");
+const IDLE_MS = 3 * 60 * 1000; // return to start if ready-but-not-spun for 3 min
 
 export default function Play() {
   const [step, setStep] = useState(TV_CODE ? "enter" : "notv"); // notv|enter|category|registering|ready|spinning|result|error
@@ -17,6 +18,21 @@ export default function Play() {
     if (!TV_CODE) return;
     getCategories(TV_CODE).then(setCats).catch(() => {});
   }, []);
+
+  // If the customer gets to "ready" but never taps SPIN, the big TV screen
+  // returns to its QR after 3 min — so reset the phone the same way, ready for
+  // the next person. Also covers the "category" screen left untouched.
+  useEffect(() => {
+    if (step !== "ready" && step !== "category") return;
+    const t = setTimeout(() => {
+      sessionRef.current = null;
+      setF({ name: "", bill: "" });
+      setResult(null);
+      setMsg("");
+      setStep(TV_CODE ? "enter" : "notv");
+    }, IDLE_MS);
+    return () => clearTimeout(t);
+  }, [step]);
 
   function toCategory() {
     if (!f.name.trim() || !f.bill.trim()) return;

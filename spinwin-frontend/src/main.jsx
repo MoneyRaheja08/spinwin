@@ -28,7 +28,9 @@ createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/kiosk" element={<Kiosk />} />
+        {/* Old links pointed at /kiosk (the keypad screen). Show the new
+            QR/scan screen there too, so every saved TV link looks the same. */}
+        <Route path="/kiosk" element={<Tv />} />
         <Route path="/tv" element={<Tv />} />
         <Route path="/play" element={<Play />} />
         <Route path="/staff" element={<Staff />} />
