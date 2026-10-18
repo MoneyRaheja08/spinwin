@@ -10,13 +10,12 @@ const PHASE = 4;
 const SPIN_SECONDS = PHASE * 2;
 const EASE_IN = "cubic-bezier(0.45, 0, 0.9, 0.6)";
 const EASE_OUT = "cubic-bezier(0.1, 0.7, 0.2, 1)";
-const PLACEHOLDER = [
-  { name: "₹100" }, { name: "₹500" }, { name: "Earphones" },
-  { name: "Smartwatch" }, { name: "Cover" }, { name: "₹2000" },
-];
+// A blank wheel (colours only, no labels) to show while the real gifts load,
+// so the screen never flashes old demo prizes first.
+const LOADING_WHEEL = Array.from({ length: 6 }, () => ({ name: "" }));
 
 function displayWheel(list) {
-  const base = list && list.length ? list : PLACEHOLDER;
+  const base = list && list.length ? list : LOADING_WHEEL;
   if (base.length >= 3) return base;
   const times = Math.ceil(6 / base.length);
   const out = [];
