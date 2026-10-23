@@ -29,8 +29,13 @@ export default function QuickSetup() {
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   }
 
-  async function toggleStock(prizeId, makeActive) {
-    try { await patch(`/api/admin/prizes/${prizeId}`, { is_active: makeActive }); reload(); }
+  // Out of stock = set the gift's inventory to 0 (it can't be won), but the
+  // gift STAYS on the wheel. Restock = set it back to full. We never touch
+  // is_active here, so nothing ever disappears from the wheel.
+  async function toggleStock(inv, goingOut) {
+    if (!inv) return;
+    const set_remaining = goingOut ? 0 : (inv.quantity_initial || UNLIMITED);
+    try { await post(`/api/admin/inventory/${inv.id}/adjust`, { set_remaining }); reload(); }
     catch (e) { setMsg(e.message); }
   }
 
@@ -55,20 +60,24 @@ export default function QuickSetup() {
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Out of stock</h3>
         <p className="muted" style={{ marginTop: 0 }}>
-          Turn a gift <b>off</b> when it runs out — it stops being won and leaves the wheel in every
-          category. Turn it back <b>on</b> when restocked; its percentages are kept.
+          Mark a gift <b>OUT</b> when it runs out — it stops being won, but <b>still shows on the
+          wheel</b> so the wheel stays full. Tap again to restock; its percentages are kept.
         </p>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          {stockGifts.map((p) => (
-            <button key={p.id} className="btn sm"
-                    style={p.is_active
-                      ? { background: "rgba(47,191,113,0.18)", color: "#8ff0b5", border: "1px solid #2fbf71" }
-                      : { background: "rgba(229,57,53,0.18)", color: "#ff9b98", border: "1px solid #e53935" }}
-                    onClick={() => toggleStock(p.id, !p.is_active)}
-                    title={p.is_active ? "In stock — tap to mark OUT" : "Out of stock — tap to restore"}>
-              {p.is_active ? `✓ ${p.name} — in stock` : `✕ ${p.name} — OUT (tap to restore)`}
-            </button>
-          ))}
+          {stockGifts.map((p) => {
+            const inv = invByPrize[p.id];
+            const inStock = inv ? (inv.quantity_remaining ?? 0) > 0 : true;
+            return (
+              <button key={p.id} className="btn sm" disabled={!inv}
+                      style={inStock
+                        ? { background: "rgba(47,191,113,0.18)", color: "#8ff0b5", border: "1px solid #2fbf71" }
+                        : { background: "rgba(229,57,53,0.18)", color: "#ff9b98", border: "1px solid #e53935" }}
+                      onClick={() => toggleStock(inv, inStock)}
+                      title={inStock ? "In stock — tap to mark OUT" : "Out of stock — tap to restock"}>
+                {inStock ? `✓ ${p.name} — in stock` : `✕ ${p.name} — OUT (tap to restock)`}
+              </button>
+            );
+          })}
           {!stockGifts.length && <span className="muted">Add gifts to a category first.</span>}
         </div>
         {msg && <p className="adm-err">{msg}</p>}
