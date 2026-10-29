@@ -5,19 +5,37 @@ import * as sound from "../sound";
 
 const TV_CODE = new URLSearchParams(location.search).get("tv");
 const IDLE_MS = 3 * 60 * 1000; // return to start if ready-but-not-spun for 3 min
+const IG_URL = "https://www.instagram.com/ashokaenterpriseschd";
+const IG_HANDLE = "@ashokaenterpriseschd";
+const FOLLOW_WAIT = 3; // seconds before "Continue" unlocks after tapping Follow
 
 export default function Play() {
-  const [step, setStep] = useState(TV_CODE ? "enter" : "notv"); // notv|enter|category|registering|ready|spinning|result|error
+  const [step, setStep] = useState(TV_CODE ? "instagram" : "notv"); // notv|instagram|enter|category|registering|ready|spinning|result|error
   const [f, setF] = useState({ name: "", bill: "" });
   const [cats, setCats] = useState([]);
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
+  const [followed, setFollowed] = useState(false);
+  const [wait, setWait] = useState(0);
   const sessionRef = useRef(null);
 
   useEffect(() => {
     if (!TV_CODE) return;
     getCategories(TV_CODE).then(setCats).catch(() => {});
   }, []);
+
+  // countdown that unlocks "Continue" a few seconds after they tap Follow
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
+
+  function openInstagram() {
+    sound.unlock();
+    window.open(IG_URL, "_blank", "noopener");
+    if (!followed) { setFollowed(true); setWait(FOLLOW_WAIT); }
+  }
 
   // If the customer gets to "ready" but never taps SPIN, the big TV screen
   // returns to its QR after 3 min — so reset the phone the same way, ready for
@@ -29,7 +47,8 @@ export default function Play() {
       setF({ name: "", bill: "" });
       setResult(null);
       setMsg("");
-      setStep(TV_CODE ? "enter" : "notv");
+      setFollowed(false); setWait(0);
+      setStep(TV_CODE ? "instagram" : "notv");
     }, IDLE_MS);
     return () => clearTimeout(t);
   }, [step]);
@@ -64,7 +83,8 @@ export default function Play() {
     sessionRef.current = null;
     setF({ name: "", bill: "" });
     setResult(null); setMsg("");
-    setStep(TV_CODE ? "enter" : "notv");
+    setFollowed(false); setWait(0);
+    setStep(TV_CODE ? "instagram" : "notv");
   }
 
   return (
@@ -75,6 +95,20 @@ export default function Play() {
         <div className="play-card">
           <h1 className="play-h">Scan the TV code</h1>
           <p className="play-sub">Open your camera and scan the QR on the screen to start.</p>
+        </div>
+      )}
+
+      {step === "instagram" && (
+        <div className="play-card">
+          <p className="play-kicker">{branding.companyName}</p>
+          <h1 className="play-h">Follow us to play 🎁</h1>
+          <p className="play-sub">Follow <b>{IG_HANDLE}</b> on Instagram, then come back and spin to win.</p>
+          <button className="play-btn" onClick={openInstagram}>📸 Follow on Instagram</button>
+          <button className="play-btn big" style={{ marginTop: 14 }}
+                  onClick={() => { setMsg(""); setStep("enter"); }}
+                  disabled={!followed || wait > 0}>
+            {!followed ? "Tap Follow first" : wait > 0 ? `Continue in ${wait}…` : "Continue to play"}
+          </button>
         </div>
       )}
 
