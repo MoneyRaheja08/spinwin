@@ -6,16 +6,17 @@ import * as sound from "../sound";
 const TV_CODE = new URLSearchParams(location.search).get("tv");
 const IDLE_MS = 3 * 60 * 1000; // return to start if ready-but-not-spun for 3 min
 
-// Instagram follow step shows ONLY on these TVs. Add a TV code here to switch
-// it on for that screen; map it to the Instagram profile to open.
+// Instagram follow step. Every TV shows it; DH and ML use their own handle,
+// all other TVs use the default. Add/override a TV code here anytime.
+const IG_DEFAULT = "https://www.instagram.com/ashokaenterpriseschd";
 const IG_BY_TV = {
   DH: "https://www.instagram.com/ashokaenterprisesdh",
   ML: "https://www.instagram.com/ashokaenterprisesdh",
 };
 const CODE = (TV_CODE || "").toUpperCase();
-const IG_URL = IG_BY_TV[CODE] || null;
+const IG_URL = TV_CODE ? (IG_BY_TV[CODE] || IG_DEFAULT) : null;
 const IG_HANDLE = IG_URL ? "@" + IG_URL.split("/").filter(Boolean).pop() : "";
-const FIRST_STEP = TV_CODE ? (IG_URL ? "instagram" : "enter") : "notv";
+const FIRST_STEP = TV_CODE ? "instagram" : "notv";
 
 export default function Play() {
   const [step, setStep] = useState(FIRST_STEP); // notv|instagram|enter|category|registering|ready|spinning|result|error
