@@ -112,13 +112,14 @@ export default function Play() {
           <h1 className="play-h">Follow us to play 🎁</h1>
           <p className="play-sub">Follow <b>{IG_HANDLE}</b> on Instagram, then come back and spin to win.</p>
           <button className="play-btn" onClick={openInstagram}>📸 Follow on Instagram</button>
-          <button className="play-btn big" style={{ marginTop: 14 }}
-                  onClick={() => { setMsg(""); setStep("enter"); }}
-                  disabled={wait > 0}>
-            {wait > 0 ? `Continue in ${wait}s…` : "Continue to play"}
-          </button>
           {wait === 0 && (
-            <p className="play-sub" style={{ marginBottom: 0 }}>Already following? Just tap Continue.</p>
+            <>
+              <button className="play-btn big" style={{ marginTop: 14 }}
+                      onClick={() => { setMsg(""); setStep("enter"); }}>
+                Continue to play
+              </button>
+              <p className="play-sub" style={{ marginBottom: 0 }}>Already following? Just tap Continue.</p>
+            </>
           )}
         </div>
       )}
