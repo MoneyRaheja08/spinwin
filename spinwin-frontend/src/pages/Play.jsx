@@ -24,12 +24,23 @@ export default function Play() {
   const [cats, setCats] = useState([]);
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
+  const [wait, setWait] = useState(0);
   const sessionRef = useRef(null);
 
   useEffect(() => {
     if (!TV_CODE) return;
     getCategories(TV_CODE).then(setCats).catch(() => {});
   }, []);
+
+  // 6-second nudge: on the Instagram screen, "Continue" unlocks after 6s.
+  useEffect(() => {
+    if (step !== "instagram") { setWait(0); return; }
+    setWait(6);
+    const t = setInterval(() => {
+      setWait((w) => { if (w <= 1) { clearInterval(t); return 0; } return w - 1; });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [step]);
 
   function openInstagram() {
     sound.unlock();
@@ -102,10 +113,13 @@ export default function Play() {
           <p className="play-sub">Follow <b>{IG_HANDLE}</b> on Instagram, then come back and spin to win.</p>
           <button className="play-btn" onClick={openInstagram}>📸 Follow on Instagram</button>
           <button className="play-btn big" style={{ marginTop: 14 }}
-                  onClick={() => { setMsg(""); setStep("enter"); }}>
-            Continue to play
+                  onClick={() => { setMsg(""); setStep("enter"); }}
+                  disabled={wait > 0}>
+            {wait > 0 ? `Continue in ${wait}s…` : "Continue to play"}
           </button>
-          <p className="play-sub" style={{ marginBottom: 0 }}>Already following? Just tap Continue.</p>
+          {wait === 0 && (
+            <p className="play-sub" style={{ marginBottom: 0 }}>Already following? Just tap Continue.</p>
+          )}
         </div>
       )}
 
